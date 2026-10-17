@@ -10,7 +10,7 @@ local ns = vim.api.nvim_create_namespace('nitpick')
 local redraw
 
 -- 처음 어노테이션을 단 순서대로 쌓이는 문서 목록.
--- 파일 문서 = { path = 절대 경로, annotations = { { kind, text, original_text, bufnr, mark_id }, ... } }
+-- 파일 문서 = { path = 절대 경로, annotations = { { kind, text, tip, original_text, bufnr, mark_id }, ... } }
 -- 메시지 문서 = { message_buf = 버퍼 번호, annotations = ... } — :Nitpick paste로 연 버퍼
 local documents = {}
 
@@ -231,9 +231,9 @@ function M.annotations_at_cursor()
   return vim.tbl_map(function(item) return item.ann end, found)
 end
 
---- 커서 위치에서 코멘트를 고칠 수 있는 후보. 삭제 표시는 코멘트가 없으므로 빠진다.
+--- 커서 위치에서 코멘트를 고칠 수 있는 후보. 삭제 표시는 코멘트가 없고 라벨은 고칠 수 없으므로 빠진다.
 function M.comments_at_cursor()
-  return vim.tbl_filter(function(ann) return ann.text ~= nil end, M.annotations_at_cursor())
+  return vim.tbl_filter(function(ann) return ann.text ~= nil and ann.kind ~= 'label' end, M.annotations_at_cursor())
 end
 
 --- 고르는 창에 보여 줄 어노테이션 설명. 예: `L3 comment: 내용`, `L1–5 deletion: "원문"`, `[전체] 내용`
@@ -257,6 +257,12 @@ end
 
 function M.delete(range)
   return add({ kind = 'deletion' }, range)
+end
+
+--- 범위에 라벨을 단다. 라벨 본문은 '<emoji> <text>'이고, 고칠 수 없다.
+---@param label { id: string, emoji: string?, text: string, tip: string? } nitpick.labels.list()의 항목
+function M.label(range, label)
+  return add({ kind = 'label', text = require('nitpick.labels').display(label), tip = label.tip }, range)
 end
 
 function M.global(text)
@@ -333,7 +339,7 @@ end
 local function export_annotations(doc)
   local annotations = {}
   for _, ann in ipairs(doc.annotations) do
-    local item = { kind = ann.kind, text = ann.text, original_text = ann.original_text }
+    local item = { kind = ann.kind, text = ann.text, tip = ann.tip, original_text = ann.original_text }
     if ann.mark_id or ann.saved_range then
       item.start_line, item.start_col, item.end_line = position(ann)
     end

@@ -285,4 +285,63 @@ T['하이라이트 그룹']['colorscheme을 바꿔 하이라이트가 지워져�
   eq(child.lua_get('vim.api.nvim_get_hl(0, { name = "NitpickComment" }).link'), 'DiagnosticUnderlineInfo')
 end
 
+-- 사례 91, 92 -----------------------------------------------------------------
+-- 라벨은 코멘트와 따로 색을 바꿀 수 있도록 자기 하이라이트 그룹을 쓴다.
+
+local CLARIFY = { id = 'clarify-this', emoji = '❓', text = 'Clarify this' }
+
+-- 사례 91
+T['표시(render)']['라벨 범위에는 NitpickLabel이 적용되고, 끝 줄 아래에 [라벨] 가상 줄이 NitpickLabelText로 보인다'] = function()
+  -- Given
+  write_file(project .. '/a.md', { '하나', '가나 다라 마' })
+  edit(project .. '/a.md')
+
+  -- When: 2번째 줄의 "다라"에 라벨 "❓ Clarify this"를 단다.
+  review('label', { 2, #'가나 ', 2, #'가나 다라' }, CLARIFY)
+
+  -- Then: 라벨 범위에 NitpickLabel만 있고(NitpickComment 아님), 가상 줄은 "  ↳ [❓ Clarify this]"다.
+  eq(highlights('NitpickLabel'), { { 1, #'가나 ', 1, #'가나 다라' } })
+  eq(highlights('NitpickComment'), {})
+  eq(virt_lines(), {
+    { 1, false, { { '  ↳ [❓ Clarify this]', 'NitpickLabelText' } } },
+  })
+end
+
+-- 사례 92
+T['하이라이트 그룹']['사용자가 정의하지 않았으면 라벨 하이라이트는 코멘트 하이라이트로 연결된다'] = function()
+  -- When: 리뷰(nitpick.review)를 불러온다.
+  child.lua('require("nitpick.review")')
+
+  -- Then
+  eq(child.lua_get('vim.api.nvim_get_hl(0, { name = "NitpickLabel" }).link'), 'NitpickComment')
+  eq(child.lua_get('vim.api.nvim_get_hl(0, { name = "NitpickLabelText" }).link'), 'NitpickCommentText')
+end
+
+-- 사례 92
+T['하이라이트 그룹']['사용자가 먼저 정의한 라벨 하이라이트는 덮어쓰지 않는다'] = function()
+  -- Given: 사용자가 NitpickLabel을 초록 글자로 정했다.
+  child.lua('vim.api.nvim_set_hl(0, "NitpickLabel", { fg = "#00ff00" })')
+
+  -- When: 리뷰(nitpick.review)를 불러오고 라벨을 단다.
+  write_file(project .. '/a.md', { '하나' })
+  edit(project .. '/a.md')
+  review('label', { 1, 0, 1, #'하나' }, CLARIFY)
+
+  -- Then
+  eq(child.lua_get('vim.api.nvim_get_hl(0, { name = "NitpickLabel" })'), { fg = 0x00ff00 })
+end
+
+-- 사례 92
+T['하이라이트 그룹']['colorscheme을 바꿔도 라벨 하이라이트가 다시 정의된다'] = function()
+  -- Given: 리뷰(nitpick.review)를 불러왔다.
+  child.lua('require("nitpick.review")')
+
+  -- When: colorscheme을 다시 불러온다(:hi clear 후 ColorScheme 이벤트).
+  child.cmd('colorscheme default')
+
+  -- Then
+  eq(child.lua_get('vim.api.nvim_get_hl(0, { name = "NitpickLabel" }).link'), 'NitpickComment')
+  eq(child.lua_get('vim.api.nvim_get_hl(0, { name = "NitpickLabelText" }).link'), 'NitpickCommentText')
+end
+
 return T

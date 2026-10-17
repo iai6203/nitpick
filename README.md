@@ -29,19 +29,64 @@ return {
     keys = {
       { '<leader>rc', ':Nitpick comment<CR>', mode = 'x', desc = 'Nitpick comment' },
       { '<leader>rd', ':Nitpick delete<CR>', mode = 'x', desc = 'Nitpick delete' },
+      { '<leader>rl', ':Nitpick label<CR>', mode = 'x', desc = 'Nitpick label' },
       { '<leader>rc', '<Cmd>Nitpick comment<CR>', desc = 'Nitpick comment line' },
+      { '<leader>rl', '<Cmd>Nitpick label<CR>', desc = 'Nitpick label line' },
       { '<leader>rg', '<Cmd>Nitpick global<CR>', desc = 'Nitpick global comment' },
       { '<leader>re', '<Cmd>Nitpick edit<CR>', desc = 'Nitpick edit' },
       { '<leader>rx', '<Cmd>Nitpick remove<CR>', desc = 'Nitpick remove' },
       { '<leader>ry', '<Cmd>Nitpick copy<CR>', desc = 'Nitpick copy' },
       { '<leader>rp', '<Cmd>Nitpick paste<CR>', desc = 'Nitpick paste' },
     },
-    opts = {},
+    opts = {
+      -- 라벨 목록. 아래는 기본값이라 labels를 생략해도 그대로 포함됩니다.
+      labels = {
+        { emoji = '❓', text = 'Clarify this' },
+        {
+          emoji = '🗺️',
+          text = 'Missing overview',
+          tip = 'Provide a narrative overview of what is being built, why it is being built, and how it will be built. Add this before the implementation details.',
+        },
+        {
+          emoji = '🔍',
+          text = 'Verify this',
+          tip = 'This seems like an assumption. Verify by reading the actual code before proceeding.',
+        },
+        {
+          emoji = '🔬',
+          text = 'Give me an example',
+          tip = 'This is too abstract. Show a before/after, a sample input/output, or a specific scenario so I can see how this actually works.',
+        },
+        {
+          emoji = '🧬',
+          text = 'Match existing patterns',
+          tip = 'Search the codebase for existing patterns, components, or utilities that already solve this. Reuse what exists rather than introducing a new approach.',
+        },
+        {
+          emoji = '🔄',
+          text = 'Consider alternatives',
+          tip = 'Propose 2-3 alternative approaches with trade-offs based on the actual codebase. Also check the Plannotator plans directory (PLANNOTATOR_DATA_DIR or ~/.plannotator/plans/) for prior plan versions that may have already explored or rejected similar approaches.',
+        },
+        {
+          emoji = '📉',
+          text = 'Ensure no regression',
+          tip = 'Verify that this change will not break existing behavior. Identify what could regress and how to protect against it.',
+        },
+        {
+          emoji = '🚫',
+          text = 'Out of scope',
+          tip = 'This is not part of the current task. Remove it and stay focused on what was actually requested.',
+        },
+        { emoji = '🧪', text = 'Needs tests' },
+        { emoji = '👍', text = 'Nice approach' },
+        { emoji = '👍', text = 'Looks good' },
+      },
+    },
   },
 }
 ```
 
-LazyVim이라면 `~/.config/nvim/lua/plugins/nitpick.lua`에 위 내용을 넣으면 됩니다.
+LazyVim이라면 `~/.config/nvim/lua/plugins/nitpick.lua`에 위 내용을 넣으면 됩니다. 라벨은 [라벨](#라벨)을 참고하세요.
 
 > visual 모드 키맵에는 `<Cmd>` 대신 `:`를 쓰세요. 그래야 선택 범위(`'<,'>`)가 명령에 넘어갑니다.
 
@@ -68,6 +113,7 @@ lazy.nvim은 시작할 때 runtimepath를 초기화하므로 `--cmd`가 아니�
 |---|---|
 | `:[range]Nitpick comment [내용]` | 범위에 코멘트를 답니다. visual 글자 단위(`v`)로 선택했으면 선택한 글자만, 아니면 줄 전체가 대상입니다. 범위가 없으면 커서 줄 |
 | `:[range]Nitpick delete` | 범위에 삭제 표시를 합니다 |
+| `:[range]Nitpick label [id]` | 범위에 라벨을 답니다. 범위 규칙은 `comment`와 같습니다. `id`를 생략하면 고르는 창이 열립니다 |
 | `:Nitpick global [내용]` | 현재 파일 전체에 코멘트를 답니다 |
 | `:Nitpick edit [내용]` | 커서 위치의 코멘트를 고칩니다. 입력창에 기존 내용이 채워져 있습니다 |
 | `:Nitpick remove` | 커서 위치의 어노테이션을 지웁니다 |
@@ -79,10 +125,32 @@ lazy.nvim은 시작할 때 runtimepath를 초기화하므로 `--cmd`가 아니�
 
 `edit`과 `remove`는 커서 위치에 어노테이션이 여럿이면 `vim.ui.select`로 고르게 합니다. 가장 그럴듯한 것이 맨 위에 옵니다. 파일 전체 코멘트는 커서를 첫 줄에 두고 고치거나 지웁니다.
 
+### 라벨
+
+라벨은 미리 정해 둔 코멘트입니다. 자주 쓰는 피드백을 매번 입력하지 않고 골라서 답니다. 형식은 Plannotator의 quick label을 따릅니다.
+
+- 기본 라벨은 Plannotator의 기본 quick label 10개에 👍 Looks good을 더한 11개입니다([설치](#lazynvim--lazyvim)의 `opts.labels`에 전부 적어 두었습니다).
+- `labels`를 지정하면 기본 목록과 합치지 않고 **대체**합니다. 기본 라벨 일부만 바꾸려면 위 목록을 복사해서 고치세요. `labels = {}`이면 라벨을 쓰지 않습니다.
+- 항목은 `{ id?, emoji, text, tip? }`입니다.
+  - `id`: `:Nitpick label {id}`에 쓰는 이름입니다. 생략하면 `text`를 kebab-case로 바꿔 만듭니다(`Clarify this` → `clarify-this`). 명령줄에서 자동 완성됩니다.
+  - `tip`: 피드백에 함께 들어가는 에이전트용 지시문입니다.
+  - `text`가 없거나 `id`가 겹치는 항목은 알림을 띄우고 건너뜁니다. `id`가 겹치면 먼저 나온 항목을 씁니다.
+- 라벨에는 코멘트를 덧붙이지 않습니다. 설명이 더 필요하면 같은 범위에 `:Nitpick comment`를 따로 다세요.
+- 라벨은 고칠 수 없고 `:Nitpick remove`로 지우기만 합니다. `:Nitpick edit`은 라벨을 건너뜁니다.
+
+```lua
+opts = {
+  labels = {
+    { emoji = '❓', text = 'Clarify this' },
+    { id = 'perf', emoji = '🐢', text = 'Check performance', tip = 'Measure before and after this change.' },
+  },
+},
+```
+
 ### 파일 리뷰
 
 1. 파일을 열고 리뷰할 부분을 visual로 선택한 뒤 `:Nitpick comment`를 실행합니다.
-2. 지워야 할 부분은 선택한 뒤 `:Nitpick delete`를 실행합니다.
+2. 지워야 할 부분은 선택한 뒤 `:Nitpick delete`를, 정해 둔 피드백은 `:Nitpick label`을 실행합니다.
 3. 파일 전체에 대한 의견은 `:Nitpick global`로 남깁니다.
 4. 다른 파일로 옮겨 가며 반복합니다.
 5. `:Nitpick copy`로 복사해서 에이전트에게 붙여넣습니다.
@@ -129,6 +197,17 @@ I've reviewed this document and have 1 piece of feedback:
 ---
 ````
 
+라벨은 항목 머리에 `[라벨]`이 붙고, `tip`이 있으면 코멘트 대신 `tip`이 인용됩니다. 라벨이 있는 파일 끝에는 라벨별 개수가 붙습니다.
+
+````markdown
+### 1. (line 5) [🔍 Verify this] Feedback on: "항상 빠르다"
+> This seems like an assumption. Verify by reading the actual code before proceeding.
+
+### Label Summary
+
+- **🔍 Verify this**: 1
+````
+
 - 형식은 Plannotator(`backnotprop/plannotator@87dcec4`)의 `exportLinkedDocAnnotations`(파일 묶음)와 `exportMessageAnnotations`(메시지)를 따르며, 테스트에서 바이트 단위로 비교합니다.
 - 줄 번호는 Plannotator의 문단 단위가 아니라 **실제로 선택한 줄 범위**입니다.
 - 경로는 Neovim의 현재 디렉터리 기준 상대 경로이고, 그 밖에 있는 파일이면 절대 경로입니다.
@@ -142,6 +221,8 @@ I've reviewed this document and have 1 piece of feedback:
 | `NitpickComment` | 코멘트 범위 | `DiagnosticUnderlineInfo`에 연결 |
 | `NitpickDelete` | 삭제 표시 범위 | 취소선 |
 | `NitpickCommentText` | 코멘트 가상 줄 (`  ↳ 내용`) | `Comment`에 연결 |
+| `NitpickLabel` | 라벨 범위 | `NitpickComment`에 연결 |
+| `NitpickLabelText` | 라벨 가상 줄 (`  ↳ [❓ Clarify this]`) | `NitpickCommentText`에 연결 |
 
 코멘트 본문은 범위의 끝 줄 아래에, 파일 전체 코멘트는 첫 줄 위에 `  ↳ [전체] 내용`으로 보입니다. 하이라이트 그룹은 `default`로 정의하므로 직접 정한 색이 우선합니다.
 

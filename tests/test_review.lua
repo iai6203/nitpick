@@ -6,10 +6,12 @@
 --   comment(range, text)  현재 버퍼의 범위(range)에 코멘트를 단다. 성공하면 true
 --   delete(range)         현재 버퍼의 범위(range)에 삭제 표시를 한다. 성공하면 true
 --   global(text)          현재 버퍼의 파일 전체에 코멘트를 단다. 성공하면 true
+--   label(range, label)   현재 버퍼의 범위(range)에 라벨을 단다(제안). label = { id, emoji, text, tip? }. 성공하면 true
 --   remove_at_cursor()    커서 위치의 어노테이션을 지운다
 --   edit_at_cursor(text)  커서 위치의 어노테이션 코멘트를 바꾼다
 --   text_at_cursor()      커서 위치의 어노테이션 코멘트. 없으면 nil
 --   annotations_at_cursor()  커서 위치의 후보 어노테이션 목록(제안). 가장 유력한 후보가 먼저 온다.
+--   comments_at_cursor()  커서 위치에서 코멘트를 고칠 수 있는 후보. 삭제 표시와 라벨은 빠진다.
 --     *_at_cursor 함수는 후보가 여럿이면 첫 번째 후보에 동작한다.
 --   clear()               리뷰 전체를 초기화한다
 --   feedback()            파일 리뷰 피드백 텍스트. 어노테이션이 없으면 nil
@@ -485,6 +487,81 @@ A['후보가 여럿이면 고치기(edit_at_cursor)는 가장 유력한 후보�
         '',
         '### 2. (line 1) Feedback on: "다라마"',
         '> 고친 단어 코멘트',
+        '',
+        '---',
+        '',
+      })
+  )
+end
+
+-- 사례 85, 90 -----------------------------------------------------------------
+-- 라벨은 고칠 수 없다. 코멘트를 고치는 후보와 *_at_cursor 함수는 라벨을 건너뛴다.
+-- 아래 테스트는 같은 상황을 쓴다: "하나" 줄에 코멘트를 먼저, 같은 범위에 라벨을 나중에 단다.
+-- 범위가 같으면 나중에 단 것이 앞에 오므로(사례 50) 정렬된 첫 후보는 라벨이다.
+
+T['라벨과 코멘트 고치기'] = MiniTest.new_set()
+local E = T['라벨과 코멘트 고치기']
+
+local CLARIFY = { id = 'clarify-this', emoji = '❓', text = 'Clarify this' }
+
+local function given_comment_then_label()
+  write_file(project .. '/a.md', { '하나' })
+  edit(project .. '/a.md')
+  review('comment', { 1, 0, 1, #'하나' }, '코멘트')
+  review('label', { 1, 0, 1, #'하나' }, CLARIFY)
+  child.api.nvim_win_set_cursor(0, { 1, 0 })
+end
+
+-- 사례 85
+E['코멘트를 고칠 수 있는 후보(comments_at_cursor)에서 라벨은 빠진다'] = function()
+  -- Given
+  given_comment_then_label()
+
+  -- When: 후보를 종류(kind)와 본문(text)만 남겨 읽는다.
+  local result = child.lua([[
+    return vim.tbl_map(function(ann)
+      return { kind = ann.kind, text = ann.text }
+    end, require('nitpick.review').comments_at_cursor())
+  ]])
+
+  -- Then
+  eq(result, { { kind = 'comment', text = '코멘트' } })
+end
+
+-- 사례 90
+E['커서 위치의 코멘트(text_at_cursor)는 앞에 있는 라벨을 건너뛰고 코멘트를 돌려준다'] = function()
+  -- Given
+  given_comment_then_label()
+
+  -- When / Then
+  eq(review('text_at_cursor'), '코멘트')
+end
+
+-- 사례 90
+E['고치기(edit_at_cursor)는 앞에 있는 라벨을 건너뛰고 코멘트만 바꾼다'] = function()
+  -- Given
+  given_comment_then_label()
+
+  -- When
+  review('edit_at_cursor', '고친 코멘트')
+
+  -- Then: 라벨은 그대로다.
+  eq(
+    review('feedback'),
+    HEADER
+      .. lines({
+        '## a.md',
+        '',
+        "I've reviewed this document and have 2 pieces of feedback:",
+        '',
+        '### 1. (line 1) Feedback on: "하나"',
+        '> 고친 코멘트',
+        '',
+        '### 2. (line 1) [❓ Clarify this] Feedback on: "하나"',
+        '',
+        '### Label Summary',
+        '',
+        '- **❓ Clarify this**: 1',
         '',
         '---',
         '',

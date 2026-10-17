@@ -164,4 +164,45 @@ S['메시지 본문에 ``` 펜스가 있으면 발췌문을 더 긴 ```` 펜스�
   )
 end
 
+-- 사례 70
+-- 메시지 형식에서는 라벨 요약(Label Summary)이 구분선(---) 뒤에 "##" 제목으로 붙고,
+-- 원본이 끝 공백을 지우므로(trimEnd) 요약 목록의 마지막 줄로 끝난다.
+S['라벨이 있으면 구분선(---) 뒤에 ## Label Summary를 붙이고 끝 공백 없이 끝난다'] = function()
+  -- Given: 붙여넣은 답변 3번째 줄에 라벨 "❓ Clarify this"를 달았다.
+  local message = {
+    text = '# 계획\n\n첫 단계를 진행합니다.',
+    annotations = {
+      { kind = 'label', start_line = 3, end_line = 3, original_text = '첫 단계', text = '❓ Clarify this' },
+    },
+  }
+
+  -- When
+  local output = message_feedback(message)
+
+  -- Then
+  eq(
+    output,
+    HEADER
+      .. lines({
+        '```markdown',
+        '# 계획',
+        '',
+        '첫 단계를 진행합니다.',
+        '```',
+        '',
+        '# Feedback for Message 1',
+        '',
+        "I've reviewed this message and have 1 piece of feedback:",
+        '',
+        '## 1. (line 3) [❓ Clarify this] Feedback on: "첫 단계"',
+        '',
+        '---',
+        '',
+        '## Label Summary',
+        '',
+        '- **❓ Clarify this**: 1',
+      })
+  )
+end
+
 return T

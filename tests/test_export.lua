@@ -7,11 +7,12 @@
 -- 입력 모양 (제안):
 --   문서 목록(documents) = { { path = 'README.md', annotations = { 어노테이션, ... } }, ... }
 --   어노테이션 = {
---     kind = 'comment' | 'deletion' | 'global',
+--     kind = 'comment' | 'deletion' | 'global' | 'label',
 --     start_line, end_line,  -- 1부터 시작하는 줄 번호 (global에는 없음)
 --     start_col,             -- 0부터 시작하는 열 (생략하면 0)
 --     original_text,         -- 선택한 원문 (global에는 없음)
---     text,                  -- 코멘트 본문 (deletion에는 없음)
+--     text,                  -- 코멘트 본문 (deletion에는 없음). label은 "<emoji> <text>" (예: '❓ Clarify this')
+--     tip,                   -- label에만: 에이전트에게 줄 지시문 (생략 가능)
 --   }
 
 local eq = MiniTest.expect.equality
@@ -456,6 +457,283 @@ S['코멘트가 여러 줄이면 원본처럼 첫 줄에만 인용 표시(> )를
         '### 1. (line 1) Feedback on: "제목"',
         '> 첫 줄',
         '둘째 줄',
+        '',
+        '---',
+        '',
+      })
+  )
+end
+
+-- 라벨(kind = 'label') ---------------------------------------------------------
+-- 원본은 라벨을 isQuickLabel 코멘트로 다룬다. 항목 머리에 "[<emoji> <text>]"를 붙이고,
+-- 코멘트 인용 대신 tip이 있으면 tip을 인용하며, 라벨이 있는 파일 끝에 라벨별 개수(Label Summary)를 붙인다.
+
+T['라벨 직렬화(file_feedback)'] = MiniTest.new_set()
+local L = T['라벨 직렬화(file_feedback)']
+
+-- 원본 기본 라벨 "🔍 Verify this"의 tip
+local VERIFY_TIP = 'This seems like an assumption. Verify by reading the actual code before proceeding.'
+
+-- 사례 65
+L['tip이 없는 라벨은 [라벨] 머리 줄만 출력하고 인용(>) 줄을 붙이지 않는다'] = function()
+  -- Given: 3번째 줄에 tip이 없는 라벨 "❓ Clarify this"를 달았다.
+  local documents = {
+    {
+      path = 'README.md',
+      annotations = {
+        { kind = 'label', start_line = 3, end_line = 3, original_text = '설치 방법', text = '❓ Clarify this' },
+      },
+    },
+  }
+
+  -- When
+  local output = file_feedback(documents)
+
+  -- Then: 머리 줄 바로 다음이 빈 줄이고, 그 뒤에 라벨 요약이 온다.
+  eq(
+    output,
+    HEADER
+      .. lines({
+        '## README.md',
+        '',
+        "I've reviewed this document and have 1 piece of feedback:",
+        '',
+        '### 1. (line 3) [❓ Clarify this] Feedback on: "설치 방법"',
+        '',
+        '### Label Summary',
+        '',
+        '- **❓ Clarify this**: 1',
+        '',
+        '---',
+        '',
+      })
+  )
+end
+
+-- 사례 66
+L['tip이 있는 라벨은 머리 줄 다음에 tip을 인용(>)으로 출력한다'] = function()
+  -- Given: 5~6번째 줄에 tip이 있는 라벨 "🔍 Verify this"를 달았다.
+  local documents = {
+    {
+      path = 'README.md',
+      annotations = {
+        {
+          kind = 'label',
+          start_line = 5,
+          end_line = 6,
+          original_text = '항상 빠르다',
+          text = '🔍 Verify this',
+          tip = VERIFY_TIP,
+        },
+      },
+    },
+  }
+
+  -- When
+  local output = file_feedback(documents)
+
+  -- Then
+  eq(
+    output,
+    HEADER
+      .. lines({
+        '## README.md',
+        '',
+        "I've reviewed this document and have 1 piece of feedback:",
+        '',
+        '### 1. (lines 5–6) [🔍 Verify this] Feedback on: "항상 빠르다"',
+        '> This seems like an assumption. Verify by reading the actual code before proceeding.',
+        '',
+        '### Label Summary',
+        '',
+        '- **🔍 Verify this**: 1',
+        '',
+        '---',
+        '',
+      })
+  )
+end
+
+-- 사례 67
+L['라벨 요약(Label Summary)은 파일마다 그 파일의 항목 뒤, 다음 파일 섹션이나 구분선(---) 앞에 붙는다'] = function()
+  -- Given: 두 파일에 라벨이 하나씩 있다.
+  local documents = {
+    {
+      path = 'README.md',
+      annotations = {
+        { kind = 'label', start_line = 3, end_line = 3, original_text = '설치 방법', text = '❓ Clarify this' },
+      },
+    },
+    {
+      path = 'docs/guide.md',
+      annotations = {
+        { kind = 'label', start_line = 10, end_line = 10, original_text = '파서를 고친다', text = '🧪 Needs tests' },
+      },
+    },
+  }
+
+  -- When
+  local output = file_feedback(documents)
+
+  -- Then: 각 요약에는 그 파일의 라벨만 들어간다.
+  eq(
+    output,
+    HEADER
+      .. lines({
+        '## README.md',
+        '',
+        "I've reviewed this document and have 1 piece of feedback:",
+        '',
+        '### 1. (line 3) [❓ Clarify this] Feedback on: "설치 방법"',
+        '',
+        '### Label Summary',
+        '',
+        '- **❓ Clarify this**: 1',
+        '',
+        '## docs/guide.md',
+        '',
+        "I've reviewed this document and have 1 piece of feedback:",
+        '',
+        '### 1. (line 10) [🧪 Needs tests] Feedback on: "파서를 고친다"',
+        '',
+        '### Label Summary',
+        '',
+        '- **🧪 Needs tests**: 1',
+        '',
+        '---',
+        '',
+      })
+  )
+end
+
+-- 사례 68
+L['라벨 요약은 라벨별 개수를 문서 순서에서 처음 나온 순서대로 나열한다'] = function()
+  -- Given: 5번째 줄 Verify, 1번째 줄 Clarify, 9번째 줄 Verify 순서로 달았다.
+  --   단 순서로는 Verify가 먼저지만, 문서 순서로는 Clarify(1번째 줄)가 먼저 나온다.
+  local documents = {
+    {
+      path = 'README.md',
+      annotations = {
+        { kind = 'label', start_line = 5, end_line = 5, original_text = '첫 가정', text = '🔍 Verify this', tip = VERIFY_TIP },
+        { kind = 'label', start_line = 1, end_line = 1, original_text = '제목', text = '❓ Clarify this' },
+        { kind = 'label', start_line = 9, end_line = 9, original_text = '둘째 가정', text = '🔍 Verify this', tip = VERIFY_TIP },
+      },
+    },
+  }
+
+  -- When
+  local output = file_feedback(documents)
+
+  -- Then: Clarify 1개, Verify 2개 순서다.
+  eq(
+    output,
+    HEADER
+      .. lines({
+        '## README.md',
+        '',
+        "I've reviewed this document and have 3 pieces of feedback:",
+        '',
+        '### 1. (line 1) [❓ Clarify this] Feedback on: "제목"',
+        '',
+        '### 2. (line 5) [🔍 Verify this] Feedback on: "첫 가정"',
+        '> This seems like an assumption. Verify by reading the actual code before proceeding.',
+        '',
+        '### 3. (line 9) [🔍 Verify this] Feedback on: "둘째 가정"',
+        '> This seems like an assumption. Verify by reading the actual code before proceeding.',
+        '',
+        '### Label Summary',
+        '',
+        '- **❓ Clarify this**: 1',
+        '- **🔍 Verify this**: 2',
+        '',
+        '---',
+        '',
+      })
+  )
+end
+
+-- 사례 69
+L['라벨이 없는 파일에는 라벨 요약을 붙이지 않고, 라벨이 있는 파일에만 붙인다'] = function()
+  -- Given: README.md에는 일반 코멘트만, docs/guide.md에는 라벨만 있다.
+  local documents = {
+    {
+      path = 'README.md',
+      annotations = {
+        { kind = 'comment', start_line = 2, end_line = 2, original_text = '설치 방법', text = '예시를 추가해 줘.' },
+      },
+    },
+    {
+      path = 'docs/guide.md',
+      annotations = {
+        { kind = 'label', start_line = 4, end_line = 4, original_text = 'parse()', text = '👍 Looks good' },
+      },
+    },
+  }
+
+  -- When
+  local output = file_feedback(documents)
+
+  -- Then
+  eq(
+    output,
+    HEADER
+      .. lines({
+        '## README.md',
+        '',
+        "I've reviewed this document and have 1 piece of feedback:",
+        '',
+        '### 1. (line 2) Feedback on: "설치 방법"',
+        '> 예시를 추가해 줘.',
+        '',
+        '## docs/guide.md',
+        '',
+        "I've reviewed this document and have 1 piece of feedback:",
+        '',
+        '### 1. (line 4) [👍 Looks good] Feedback on: "parse()"',
+        '',
+        '### Label Summary',
+        '',
+        '- **👍 Looks good**: 1',
+        '',
+        '---',
+        '',
+      })
+  )
+end
+
+-- 사례 71
+L['라벨도 일반 코멘트와 똑같이 피드백 개수, 번호, 문서 순서 정렬에 포함된다'] = function()
+  -- Given: 5번째 줄 코멘트를 먼저, 2번째 줄 라벨을 나중에 달았다.
+  local documents = {
+    {
+      path = 'README.md',
+      annotations = {
+        { kind = 'comment', start_line = 5, end_line = 5, original_text = '예시', text = '더 짧게 써 줘.' },
+        { kind = 'label', start_line = 2, end_line = 2, original_text = '설치 방법', text = '❓ Clarify this' },
+      },
+    },
+  }
+
+  -- When
+  local output = file_feedback(documents)
+
+  -- Then: 개수는 2개이고, 2번째 줄의 라벨이 1번이다.
+  eq(
+    output,
+    HEADER
+      .. lines({
+        '## README.md',
+        '',
+        "I've reviewed this document and have 2 pieces of feedback:",
+        '',
+        '### 1. (line 2) [❓ Clarify this] Feedback on: "설치 방법"',
+        '',
+        '### 2. (line 5) Feedback on: "예시"',
+        '> 더 짧게 써 줘.',
+        '',
+        '### Label Summary',
+        '',
+        '- **❓ Clarify this**: 1',
         '',
         '---',
         '',

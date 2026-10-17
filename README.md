@@ -22,8 +22,9 @@ Neovim에서 문서와 코드에 [Plannotator](https://github.com/backnotprop/pl
 ```lua
 return {
   {
-    dir = '~/Projects/nitpick', -- 저장소를 내려받은 경로
+    'iai6203/nitpick',
     name = 'nitpick.nvim',
+    version = '*', -- 최신 릴리스 태그를 따릅니다
     cmd = 'Nitpick',
     keys = {
       { '<leader>rc', ':Nitpick comment<CR>', mode = 'x', desc = 'Nitpick comment' },
@@ -44,9 +45,18 @@ LazyVim이라면 `~/.config/nvim/lua/plugins/nitpick.lua`에 위 내용을 넣�
 
 > visual 모드 키맵에는 `<Cmd>` 대신 `:`를 쓰세요. 그래야 선택 범위(`'<,'>`)가 명령에 넘어갑니다.
 
+`version = '*'`를 지우면 릴리스 태그 대신 `main`의 최신 커밋을 따릅니다.
+
+### 업데이트
+
+- `:Lazy update`로 새 릴리스를 받습니다. `:Lazy check`로 업데이트가 있는지만 확인할 수도 있습니다.
+- 설치된 커밋은 `lazy-lock.json`에 기록됩니다. 업데이트 후 문제가 생기면 `:Lazy restore nitpick.nvim`으로 lock 파일의 커밋으로 되돌리거나, 스펙에 `tag = 'v0.1.0'`처럼 버전을 고정하세요.
+- 바뀐 내용은 [Releases](https://github.com/iai6203/nitpick/releases)에서 볼 수 있습니다.
+
 ### 설치 없이 써 보기
 
 ```sh
+git clone https://github.com/iai6203/nitpick ~/Projects/nitpick
 nvim -c 'set rtp+=~/Projects/nitpick | runtime plugin/nitpick.lua' README.md
 ```
 
@@ -176,3 +186,7 @@ make test
 ## 감사
 
 피드백 형식은 [Plannotator](https://github.com/backnotprop/plannotator)(Apache-2.0 / MIT)를 따릅니다.
+
+## 라이선스
+
+[MIT](LICENSE)

@@ -1,9 +1,13 @@
 -- 여러 파일에 걸친 리뷰 상태. 위치는 extmark가 들고 있어서 편집을 따라간다.
 local export = require('nitpick.export')
+local render = require('nitpick.render')
 
 local M = {}
 
 local ns = vim.api.nvim_create_namespace('nitpick')
+
+-- 버퍼의 표시를 다시 그린다. 아래에서 정의한다.
+local redraw
 
 -- 처음 어노테이션을 단 순서대로 쌓이는 문서 목록.
 -- 파일 문서 = { path = 절대 경로, annotations = { { kind, text, original_text, bufnr, mark_id }, ... } }
@@ -58,6 +62,7 @@ local function add(ann, range)
   end
   ann.bufnr = bufnr
   table.insert(doc.annotations, ann)
+  redraw(bufnr)
   return true
 end
 
@@ -92,6 +97,24 @@ local function each_positioned(fn)
   end
 end
 
+function redraw(bufnr)
+  if not vim.api.nvim_buf_is_loaded(bufnr) then
+    return
+  end
+  local items = {}
+  for _, doc in ipairs(documents) do
+    for _, ann in ipairs(doc.annotations) do
+      if ann.bufnr == bufnr then
+        local range = ann.mark_id and { mark_range(ann) } or nil
+        if range or ann.kind == 'global' then
+          table.insert(items, { kind = ann.kind, text = ann.text, range = range })
+        end
+      end
+    end
+  end
+  render.draw(bufnr, items)
+end
+
 local group = vim.api.nvim_create_augroup('nitpick', { clear = true })
 
 -- 버퍼를 닫으면(:bdelete 등) extmark가 사라지므로 직전 범위를 저장해 둔다.
@@ -118,7 +141,6 @@ vim.api.nvim_create_autocmd('BufReadPost', {
     each_positioned(function(doc, ann)
       if doc.path == path and ann.saved_range then
         local start_row, start_col, end_row, end_col = unpack(ann.saved_range)
-        ann.bufnr = args.buf
         ann.mark_id = vim.api.nvim_buf_set_extmark(args.buf, ns, start_row, start_col, {
           end_row = end_row,
           end_col = end_col,
@@ -128,6 +150,23 @@ vim.api.nvim_create_autocmd('BufReadPost', {
         ann.saved_range = nil
       end
     end)
+    -- 버퍼 번호가 바뀌었을 수 있으므로 파일 전체 코멘트까지 모두 새 버퍼로 옮긴다.
+    for _, doc in ipairs(documents) do
+      if doc.path == path then
+        for _, ann in ipairs(doc.annotations) do
+          ann.bufnr = args.buf
+        end
+      end
+    end
+    redraw(args.buf)
+  end,
+})
+
+-- 버퍼를 창에 다시 띄우면 창의 스크롤(topfill)이 초기화되므로 다시 그려 첫 줄 위 가상 줄을 보이게 한다.
+vim.api.nvim_create_autocmd('BufWinEnter', {
+  group = group,
+  callback = function(args)
+    redraw(args.buf)
   end,
 })
 
@@ -168,6 +207,7 @@ function M.remove_at_cursor()
   if ann.mark_id then
     vim.api.nvim_buf_del_extmark(ann.bufnr, ns, ann.mark_id)
   end
+  redraw(ann.bufnr)
   return true
 end
 
@@ -184,12 +224,14 @@ function M.edit_at_cursor(text)
     return false
   end
   doc.annotations[index].text = text
+  redraw(doc.annotations[index].bufnr)
   return true
 end
 
 function M.clear()
   for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
     vim.api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
+    render.clear(bufnr)
   end
   documents = {}
 end

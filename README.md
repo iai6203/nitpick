@@ -262,7 +262,6 @@ make test
 처음 실행하면 [mini.test](https://github.com/nvim-mini/mini.nvim)를 `deps/`에 내려받습니다.
 
 - 로컬에서 실행하기, 테스트 구성, 화면 확인, 원본 형식과 비교하는 방법: [`docs/local-development.md`](docs/local-development.md)
-- 테스트 사례 목록: [`docs/test-list.md`](docs/test-list.md)
 
 ## 감사
 

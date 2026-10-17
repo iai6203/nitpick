@@ -80,7 +80,6 @@ local T = MiniTest.new_set({
 T['표시(render)'] = MiniTest.new_set()
 local S = T['표시(render)']
 
--- 사례 39
 S['코멘트 범위에 하이라이트 그룹 NitpickComment가 적용된다'] = function()
   -- Given
   write_file(project .. '/a.md', { '하나', '가나 다라 마' })
@@ -93,7 +92,6 @@ S['코멘트 범위에 하이라이트 그룹 NitpickComment가 적용된다'] =
   eq(highlights('NitpickComment'), { { 1, #'가나 ', 1, #'가나 다라' } })
 end
 
--- 사례 40
 S['삭제 표시 범위에 하이라이트 그룹 NitpickDelete가 적용된다'] = function()
   -- Given
   write_file(project .. '/a.md', { '하나', '둘', '셋' })
@@ -107,7 +105,6 @@ S['삭제 표시 범위에 하이라이트 그룹 NitpickDelete가 적용된다'
   eq(highlights('NitpickComment'), {})
 end
 
--- 사례 41
 S['코멘트 범위의 끝 줄 아래에 코멘트 본문이 줄마다 가상 줄로 보인다'] = function()
   -- Given
   write_file(project .. '/a.md', { '하나', '둘', '셋', '넷' })
@@ -129,7 +126,6 @@ S['코멘트 범위의 끝 줄 아래에 코멘트 본문이 줄마다 가상 �
   })
 end
 
--- 사례 42
 S['코멘트를 수정하면(edit_at_cursor) 가상 줄의 내용도 바뀐다'] = function()
   -- Given: 1번째 줄에 코멘트가 있고 커서가 그 줄에 있다.
   write_file(project .. '/a.md', { '하나', '둘' })
@@ -144,7 +140,6 @@ S['코멘트를 수정하면(edit_at_cursor) 가상 줄의 내용도 바뀐다']
   eq(virt_lines(), { { 0, false, { { '  ↳ 고친 코멘트', 'NitpickCommentText' } } } })
 end
 
--- 사례 43
 S['어노테이션을 지우면(remove_at_cursor) 하이라이트와 가상 줄이 함께 사라진다'] = function()
   -- Given: 1번째 줄에 코멘트가 있고 커서가 그 줄에 있다.
   write_file(project .. '/a.md', { '하나', '둘' })
@@ -160,7 +155,6 @@ S['어노테이션을 지우면(remove_at_cursor) 하이라이트와 가상 줄�
   eq(virt_lines(), {})
 end
 
--- 사례 44
 S['버퍼를 닫았다가(bdelete) 다시 열면 하이라이트와 가상 줄도 복원된다'] = function()
   -- Given: a.md의 2번째 줄에 코멘트가 있고, 다른 파일 b.md도 열려 있다.
   write_file(project .. '/a.md', { '하나', '둘', '셋' })
@@ -178,7 +172,6 @@ S['버퍼를 닫았다가(bdelete) 다시 열면 하이라이트와 가상 줄�
   eq(virt_lines(), { { 1, false, { { '  ↳ 코멘트', 'NitpickCommentText' } } } })
 end
 
--- 사례 45
 S['파일 전체 코멘트는 버퍼 첫 줄 위에 [전체] 가상 줄로 보인다'] = function()
   -- Given
   write_file(project .. '/a.md', { '하나', '둘' })
@@ -192,7 +185,6 @@ S['파일 전체 코멘트는 버퍼 첫 줄 위에 [전체] 가상 줄로 보�
   eq(highlights('NitpickComment'), {})
 end
 
--- 사례 45-1, 45-2 -------------------------------------------------------------
 -- Neovim은 첫 줄 위의 가상 줄을 창이 그만큼 위로 스크롤된 상태(topfill)일 때만 보여 준다.
 -- 그래서 실제로 보이는지는 현재 창의 topfill(winsaveview)로 확인한다.
 
@@ -200,7 +192,6 @@ local function topfill()
   return child.lua_get('vim.fn.winsaveview().topfill')
 end
 
--- 사례 45-1
 S['파일 전체 코멘트를 달면 첫 줄부터 보여 주는 창이 가상 줄이 보이도록 위로 스크롤된다'] = function()
   -- Given: 첫 줄부터 보여 주는 창이다.
   write_file(project .. '/a.md', { '하나', '둘' })
@@ -214,7 +205,6 @@ S['파일 전체 코멘트를 달면 첫 줄부터 보여 주는 창이 가상 �
   eq(topfill(), 1)
 end
 
--- 사례 45-2
 S['파일 전체 코멘트가 있는 파일을 창에 다시 띄우면 가상 줄이 보인다'] = function()
   -- Given: a.md에 전체 코멘트를 단 뒤 같은 창에 b.md를 띄웠다.
   write_file(project .. '/a.md', { '하나' })
@@ -230,7 +220,6 @@ S['파일 전체 코멘트가 있는 파일을 창에 다시 띄우면 가상 �
   eq(topfill(), 1)
 end
 
--- 사례 45-2
 S['파일 전체 코멘트가 있는 파일을 닫았다가(bdelete) 다시 열면 가상 줄이 보인다'] = function()
   -- Given: a.md에 전체 코멘트를 단 뒤 b.md로 옮겨 a.md 버퍼를 닫았다.
   write_file(project .. '/a.md', { '하나' })
@@ -246,8 +235,6 @@ S['파일 전체 코멘트가 있는 파일을 닫았다가(bdelete) 다시 열�
   -- Then
   eq(topfill(), 1)
 end
-
--- 사례 46 ---------------------------------------------------------------------
 
 T['하이라이트 그룹'] = MiniTest.new_set()
 
@@ -285,12 +272,10 @@ T['하이라이트 그룹']['colorscheme을 바꿔 하이라이트가 지워져�
   eq(child.lua_get('vim.api.nvim_get_hl(0, { name = "NitpickComment" }).link'), 'DiagnosticUnderlineInfo')
 end
 
--- 사례 91, 92 -----------------------------------------------------------------
 -- 라벨은 코멘트와 따로 색을 바꿀 수 있도록 자기 하이라이트 그룹을 쓴다.
 
 local CLARIFY = { id = 'clarify-this', emoji = '❓', text = 'Clarify this' }
 
--- 사례 91
 T['표시(render)']['라벨 범위에는 NitpickLabel이 적용되고, 끝 줄 아래에 [라벨] 가상 줄이 NitpickLabelText로 보인다'] = function()
   -- Given
   write_file(project .. '/a.md', { '하나', '가나 다라 마' })
@@ -307,7 +292,6 @@ T['표시(render)']['라벨 범위에는 NitpickLabel이 적용되고, 끝 줄 �
   })
 end
 
--- 사례 92
 T['하이라이트 그룹']['사용자가 정의하지 않았으면 라벨 하이라이트는 코멘트 하이라이트로 연결된다'] = function()
   -- When: 리뷰(nitpick.review)를 불러온다.
   child.lua('require("nitpick.review")')
@@ -317,7 +301,6 @@ T['하이라이트 그룹']['사용자가 정의하지 않았으면 라벨 하�
   eq(child.lua_get('vim.api.nvim_get_hl(0, { name = "NitpickLabelText" }).link'), 'NitpickCommentText')
 end
 
--- 사례 92
 T['하이라이트 그룹']['사용자가 먼저 정의한 라벨 하이라이트는 덮어쓰지 않는다'] = function()
   -- Given: 사용자가 NitpickLabel을 초록 글자로 정했다.
   child.lua('vim.api.nvim_set_hl(0, "NitpickLabel", { fg = "#00ff00" })')
@@ -331,7 +314,6 @@ T['하이라이트 그룹']['사용자가 먼저 정의한 라벨 하이라이�
   eq(child.lua_get('vim.api.nvim_get_hl(0, { name = "NitpickLabel" })'), { fg = 0x00ff00 })
 end
 
--- 사례 92
 T['하이라이트 그룹']['colorscheme을 바꿔도 라벨 하이라이트가 다시 정의된다'] = function()
   -- Given: 리뷰(nitpick.review)를 불러왔다.
   child.lua('require("nitpick.review")')

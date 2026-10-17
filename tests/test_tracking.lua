@@ -11,7 +11,7 @@ local function lines(list)
   return table.concat(list, '\n')
 end
 
--- 파일 리뷰 피드백의 머리말 (tests/test_export.lua 사례 1에서 문자 그대로 검증)
+-- 파일 리뷰 피드백의 머리말 (tests/test_export.lua에서 문자 그대로 검증)
 local HEADER = lines({
   '# File Feedback',
   '',
@@ -55,7 +55,6 @@ local T = MiniTest.new_set({
 T['위치 추적(review)'] = MiniTest.new_set()
 local S = T['위치 추적(review)']
 
--- 사례 23
 S['어노테이션 위쪽에 줄을 추가하면 출력되는 줄 번호가 그만큼 밀린다'] = function()
   -- Given: 3번째 줄에 코멘트가 있다.
   write_file(project .. '/a.md', { '하나', '둘', '셋' })
@@ -83,7 +82,6 @@ S['어노테이션 위쪽에 줄을 추가하면 출력되는 줄 번호가 그�
   )
 end
 
--- 사례 24
 S['범위의 텍스트를 고쳐도 원문(original_text)은 어노테이션을 만든 시점의 텍스트를 유지한다'] = function()
   -- Given: 2번째 줄 "둘"에 코멘트가 있다.
   write_file(project .. '/a.md', { '하나', '둘', '셋' })
@@ -111,7 +109,6 @@ S['범위의 텍스트를 고쳐도 원문(original_text)은 어노테이션을 
   )
 end
 
--- 사례 25
 -- 범위가 사라지면 extmark는 지워진 자리(다음 줄의 시작)로 모인다. 그 위치를 줄 번호로 쓴다.
 S['어노테이션을 단 범위가 통째로 지워져도 어노테이션은 남고 현재 위치를 줄 번호로 쓴다'] = function()
   -- Given: 5줄짜리 파일의 3번째 줄에 코멘트가 있다.
@@ -140,7 +137,6 @@ S['어노테이션을 단 범위가 통째로 지워져도 어노테이션은 �
   )
 end
 
--- 사례 27
 S['버퍼를 닫았다가(bdelete) 다시 열어도 어노테이션과 표시(extmark)가 남아 있다'] = function()
   -- Given: a.md의 2번째 줄에 코멘트가 있고, 다른 파일 b.md도 열려 있다.
   write_file(project .. '/a.md', { '하나', '둘', '셋' })

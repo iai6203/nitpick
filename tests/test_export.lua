@@ -27,7 +27,7 @@ local function lines(list)
   return table.concat(list, '\n')
 end
 
--- 묶음 형식의 머리말. 사례 1에서 문자 그대로 검증하고, 나머지 테스트에서는 이 상수로 줄여 쓴다.
+-- 묶음 형식의 머리말. 첫 테스트에서 문자 그대로 검증하고, 나머지 테스트에서는 이 상수로 줄여 쓴다.
 local HEADER = lines({
   '# File Feedback',
   '',
@@ -41,7 +41,6 @@ local T = MiniTest.new_set()
 T['파일 리뷰 피드백(file_feedback)'] = MiniTest.new_set()
 local S = T['파일 리뷰 피드백(file_feedback)']
 
--- 사례 1
 S['파일이 하나여도 묶음 머리말, 파일 섹션, 개수 문장 순서로 출력한다'] = function()
   -- Given: README.md 한 파일에 전체 코멘트 하나가 있다.
   local documents = {
@@ -72,7 +71,6 @@ S['파일이 하나여도 묶음 머리말, 파일 섹션, 개수 문장 순서�
   )
 end
 
--- 사례 2
 S['한 줄 코멘트는 (line N) 라벨, 원문 인용, 코멘트 인용으로 출력한다'] = function()
   -- Given: 12번째 줄 하나를 선택해 코멘트를 달았다.
   local documents = {
@@ -105,7 +103,6 @@ S['한 줄 코멘트는 (line N) 라벨, 원문 인용, 코멘트 인용으로 �
   )
 end
 
--- 사례 3
 S['여러 줄 코멘트는 en dash로 이은 (lines A–B) 라벨을 쓴다'] = function()
   -- Given: 20~24번째 줄을 선택해 코멘트를 달았다. 원문의 줄바꿈은 원본처럼 그대로 둔다.
   local documents = {
@@ -139,7 +136,6 @@ S['여러 줄 코멘트는 en dash로 이은 (lines A–B) 라벨을 쓴다'] = 
   )
 end
 
--- 사례 4
 S['삭제 표시는 Remove this, 원문 펜스, 고정 문장 순서로 출력한다'] = function()
   -- Given: 7~8번째 줄에 삭제 표시를 했다.
   local documents = {
@@ -176,7 +172,6 @@ S['삭제 표시는 Remove this, 원문 펜스, 고정 문장 순서로 출력�
   )
 end
 
--- 사례 5
 S['파일 전체 코멘트는 줄 라벨 없이 General feedback 문장으로 출력한다'] = function()
   -- Given: 특정 줄이 아니라 파일 전체에 코멘트를 달았다.
   local documents = {
@@ -204,7 +199,7 @@ S['파일 전체 코멘트는 줄 라벨 없이 General feedback 문장으로 �
   )
 end
 
--- 사례 6 (1개일 때 단수 "1 piece"는 사례 1·2에서 검증한다)
+-- 1개일 때 단수 "1 piece"는 위의 첫 두 테스트에서 검증한다.
 S['어노테이션이 2개 이상이면 개수 문장에 복수형 pieces를 쓴다'] = function()
   -- Given: 코멘트가 2개 있다.
   local documents = {
@@ -241,7 +236,6 @@ S['어노테이션이 2개 이상이면 개수 문장에 복수형 pieces를 쓴
   )
 end
 
--- 사례 7
 -- 원본 sortAnnotationsInDocumentOrder는 파일 전체 코멘트(blockId = '')를 모든 줄 어노테이션보다 앞에 두고,
 -- 전체 코멘트끼리는 만든 순서(입력 순서)를 유지한다.
 S['파일 전체 코멘트를 먼저, 나머지는 시작 줄과 시작 열 순서로 정렬해 1부터 번호를 매긴다'] = function()
@@ -293,7 +287,6 @@ S['파일 전체 코멘트를 먼저, 나머지는 시작 줄과 시작 열 순�
   )
 end
 
--- 사례 8
 S['여러 파일은 파일마다 경로 섹션을 만들고 번호를 1부터 다시 매긴다'] = function()
   -- Given: b.md에 2개, a.md에 1개의 어노테이션이 있다.
   local documents = {
@@ -346,8 +339,7 @@ S['여러 파일은 파일마다 경로 섹션을 만들고 번호를 1부터 �
   )
 end
 
--- 사례 9
--- "처음 어노테이션을 단 순서"는 리뷰 상태(B)가 문서 목록(documents)의 순서로 넘긴다.
+-- "처음 어노테이션을 단 순서"는 리뷰 상태(tests/test_review.lua)가 문서 목록(documents)의 순서로 넘긴다.
 -- 직렬화는 그 순서를 바꾸지 않아야 한다.
 S['파일 섹션은 경로 이름순이 아니라 문서 목록(documents)에 주어진 순서대로 출력한다'] = function()
   -- Given: z.md가 a.md보다 먼저 주어졌다.
@@ -384,7 +376,6 @@ S['파일 섹션은 경로 이름순이 아니라 문서 목록(documents)에 �
   )
 end
 
--- 사례 10
 S['어노테이션이 없는 파일은 섹션을 만들지 않는다'] = function()
   -- Given: empty.md에는 어노테이션이 없고 README.md에만 있다.
   local documents = {
@@ -413,7 +404,6 @@ S['어노테이션이 없는 파일은 섹션을 만들지 않는다'] = functio
   )
 end
 
--- 사례 11
 S['여러 파일이어도 구분선(---)과 줄바꿈은 전체 출력 끝에 한 번만 붙는다'] = function()
   -- Given: 어노테이션이 있는 파일이 둘이다.
   local documents = {
@@ -430,7 +420,6 @@ S['여러 파일이어도 구분선(---)과 줄바꿈은 전체 출력 끝에 �
   eq(separator_count, 1)
 end
 
--- 사례 12
 S['코멘트가 여러 줄이면 원본처럼 첫 줄에만 인용 표시(> )를 붙인다'] = function()
   -- Given: 코멘트 본문(text)에 줄바꿈이 있다.
   local documents = {
@@ -474,7 +463,6 @@ local L = T['라벨 직렬화(file_feedback)']
 -- 원본 기본 라벨 "🔍 Verify this"의 tip
 local VERIFY_TIP = 'This seems like an assumption. Verify by reading the actual code before proceeding.'
 
--- 사례 65
 L['tip이 없는 라벨은 [라벨] 머리 줄만 출력하고 인용(>) 줄을 붙이지 않는다'] = function()
   -- Given: 3번째 줄에 tip이 없는 라벨 "❓ Clarify this"를 달았다.
   local documents = {
@@ -510,7 +498,6 @@ L['tip이 없는 라벨은 [라벨] 머리 줄만 출력하고 인용(>) 줄을 
   )
 end
 
--- 사례 66
 L['tip이 있는 라벨은 머리 줄 다음에 tip을 인용(>)으로 출력한다'] = function()
   -- Given: 5~6번째 줄에 tip이 있는 라벨 "🔍 Verify this"를 달았다.
   local documents = {
@@ -554,7 +541,6 @@ L['tip이 있는 라벨은 머리 줄 다음에 tip을 인용(>)으로 출력한
   )
 end
 
--- 사례 67
 L['라벨 요약(Label Summary)은 파일마다 그 파일의 항목 뒤, 다음 파일 섹션이나 구분선(---) 앞에 붙는다'] = function()
   -- Given: 두 파일에 라벨이 하나씩 있다.
   local documents = {
@@ -606,7 +592,6 @@ L['라벨 요약(Label Summary)은 파일마다 그 파일의 항목 뒤, 다음
   )
 end
 
--- 사례 68
 L['라벨 요약은 라벨별 개수를 문서 순서에서 처음 나온 순서대로 나열한다'] = function()
   -- Given: 5번째 줄 Verify, 1번째 줄 Clarify, 9번째 줄 Verify 순서로 달았다.
   --   단 순서로는 Verify가 먼저지만, 문서 순서로는 Clarify(1번째 줄)가 먼저 나온다.
@@ -652,7 +637,6 @@ L['라벨 요약은 라벨별 개수를 문서 순서에서 처음 나온 순서
   )
 end
 
--- 사례 69
 L['라벨이 없는 파일에는 라벨 요약을 붙이지 않고, 라벨이 있는 파일에만 붙인다'] = function()
   -- Given: README.md에는 일반 코멘트만, docs/guide.md에는 라벨만 있다.
   local documents = {
@@ -701,7 +685,6 @@ L['라벨이 없는 파일에는 라벨 요약을 붙이지 않고, 라벨이 �
   )
 end
 
--- 사례 71
 L['라벨도 일반 코멘트와 똑같이 피드백 개수, 번호, 문서 순서 정렬에 포함된다'] = function()
   -- Given: 5번째 줄 코멘트를 먼저, 2번째 줄 라벨을 나중에 달았다.
   local documents = {

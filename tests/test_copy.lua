@@ -46,7 +46,7 @@ local function start_child(extra_args)
 end
 
 -- 기록된 알림 중 경고 수준(vim.log.levels.WARN)인 것의 개수.
--- 복사에 성공하면 성공 알림도 뜨므로(사례 35) 경고만 따로 센다.
+-- 복사에 성공하면 성공 알림(INFO)도 뜨므로 경고만 따로 센다.
 local function warn_count()
   return child.lua([[
     local count = 0
@@ -78,7 +78,6 @@ local T = MiniTest.new_set({
 T['복사(copy)'] = MiniTest.new_set()
 local S = T['복사(copy)']
 
--- 사례 28
 S['복사하면 리뷰 피드백(feedback)이 + 레지스터(클립보드)에 들어간다'] = function()
   -- Given: 클립보드가 있고, a.md에 코멘트가 하나 있다.
   start_child()
@@ -95,7 +94,6 @@ S['복사하면 리뷰 피드백(feedback)이 + 레지스터(클립보드)에 �
   eq(child.fn.getreg('+'), review('feedback'))
 end
 
--- 사례 20
 S['복사한 뒤에도 어노테이션은 그대로 남는다'] = function()
   -- Given: 코멘트가 있는 상태에서 피드백을 기록해 둔다.
   start_child()
@@ -112,7 +110,6 @@ S['복사한 뒤에도 어노테이션은 그대로 남는다'] = function()
   eq(review('feedback'), before)
 end
 
--- 사례 26
 -- 경고 문구는 정해지지 않았으므로 경고 수준(vim.log.levels.WARN)의 알림이 떴는지만 확인한다.
 S['저장하지 않은 변경이 있는 파일이 포함되어 있어도 복사는 하되 경고를 띄운다'] = function()
   -- Given: 코멘트를 단 뒤 파일을 고치고 저장하지 않았다.
@@ -132,7 +129,6 @@ S['저장하지 않은 변경이 있는 파일이 포함되어 있어도 복사�
   eq(warn_count(), 1)
 end
 
--- 사례 29
 -- 경고 문구는 정해지지 않았으므로 경고 수준(vim.log.levels.WARN)의 알림이 떴는지만 확인한다.
 S['클립보드 provider가 없으면 unnamed 레지스터에 넣고 경고를 띄운다'] = function()
   -- Given: 클립보드 provider를 끈 Neovim이다(g:loaded_clipboard_provider = 1).
@@ -151,7 +147,6 @@ S['클립보드 provider가 없으면 unnamed 레지스터에 넣고 경고를 �
   eq(warn_count(), 1)
 end
 
--- 사례 35
 -- 성공 문구는 정해지지 않았으므로 정보 수준(vim.log.levels.INFO)의 알림 하나만 떴는지 확인한다.
 S['클립보드에 복사하면 정보 수준의 성공 알림 하나만 띄운다'] = function()
   -- Given: 클립보드가 있고, 저장된 파일에 코멘트가 하나 있다(경고할 상황이 없다).
@@ -169,7 +164,6 @@ S['클립보드에 복사하면 정보 수준의 성공 알림 하나만 띄운�
   eq(child.lua_get('_G.notified[1].level'), vim.log.levels.INFO)
 end
 
--- 사례 30
 S['어노테이션이 0개면 복사하지 않고 리뷰 내용이 없다고 알린다'] = function()
   -- Given: 클립보드와 unnamed 레지스터에 이전 내용이 있고, 어노테이션은 없다.
   start_child()

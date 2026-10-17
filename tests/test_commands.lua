@@ -24,7 +24,7 @@ local function lines(list)
   return table.concat(list, '\n')
 end
 
--- 파일 리뷰 피드백의 머리말 (tests/test_export.lua 사례 1에서 문자 그대로 검증)
+-- 파일 리뷰 피드백의 머리말 (tests/test_export.lua에서 문자 그대로 검증)
 local HEADER = lines({
   '# File Feedback',
   '',
@@ -69,8 +69,6 @@ local T = MiniTest.new_set({
     post_once = child.stop,
   },
 })
-
--- 사례 31 ---------------------------------------------------------------------
 
 T['설정(setup)'] = MiniTest.new_set()
 
@@ -117,7 +115,6 @@ T['설정(setup)']['setup()은 어떤 키맵도 만들지 않는다'] = function
   eq(nitpick_maps, {})
 end
 
--- 사례 32 ---------------------------------------------------------------------
 -- 모든 기능을 :Nitpick <sub> 명령으로 쓸 수 있다. setup()을 부르지 않은 상태에서 실행한다.
 
 T['명령(:Nitpick)'] = MiniTest.new_set()
@@ -232,8 +229,6 @@ C[':Nitpick copy는 피드백을 클립보드에 복사한다'] = function()
   eq(child.fn.getreg('+'), feedback())
 end
 
--- 사례 33 ---------------------------------------------------------------------
-
 C['visual 글자 단위 선택에서 :Nitpick comment {text}를 실행하면 선택한 글자만 원문으로 쓴다'] = function()
   -- Given: 2번째 줄 "가나 다라마 바"에서 "다라마"를 글자 단위(v)로 선택한다.
   write_file(project .. '/a.md', { '첫 줄', '가나 다라마 바' })
@@ -294,7 +289,6 @@ C['visual 줄 단위 선택에서 :Nitpick delete를 실행하면 선택한 줄 
   )
 end
 
--- 사례 36~38 ------------------------------------------------------------------
 -- 코멘트 내용을 인자로 주지 않으면 입력창(vim.ui.input)으로 받는다.
 -- 테스트에서는 입력창을 가짜로 바꿔, 받은 옵션(opts)을 _G.prompts에 기록하고 _G.next_input을 입력한 것처럼 돌려준다.
 
@@ -314,7 +308,6 @@ T['입력창(vim.ui.input)'] = MiniTest.new_set({
 })
 local I = T['입력창(vim.ui.input)']
 
--- 사례 36
 I['내용 없이 :Nitpick global을 실행하면 입력창에 입력한 내용으로 전체 코멘트를 단다'] = function()
   -- Given: 입력창에 "입력한 전체 코멘트"를 입력할 것이다.
   write_file(project .. '/a.md', { '하나' })
@@ -343,7 +336,6 @@ I['내용 없이 :Nitpick global을 실행하면 입력창에 입력한 내용�
   )
 end
 
--- 사례 36
 I['내용 없이 범위를 주고 :Nitpick comment를 실행하면 입력창에 입력한 내용으로 그 범위에 코멘트를 단다'] = function()
   -- Given
   write_file(project .. '/a.md', { '하나', '둘' })
@@ -372,7 +364,6 @@ I['내용 없이 범위를 주고 :Nitpick comment를 실행하면 입력창에 
   )
 end
 
--- 사례 37
 I['입력창을 취소하면(nil) 어노테이션을 추가하지 않는다'] = function()
   -- Given: 입력창에서 취소할 것이다(_G.next_input = nil).
   write_file(project .. '/a.md', { '하나' })
@@ -386,7 +377,6 @@ I['입력창을 취소하면(nil) 어노테이션을 추가하지 않는다'] = 
   eq(feedback(), vim.NIL)
 end
 
--- 사례 37
 I['입력창에 빈 내용을 입력하면 어노테이션을 추가하지 않는다'] = function()
   -- Given: 입력창에 빈 문자열을 입력할 것이다.
   write_file(project .. '/a.md', { '하나' })
@@ -401,7 +391,6 @@ I['입력창에 빈 내용을 입력하면 어노테이션을 추가하지 않�
   eq(feedback(), vim.NIL)
 end
 
--- 사례 38
 I['내용 없이 :Nitpick edit을 실행하면 입력창에 기존 코멘트가 채워져 있고 입력한 내용으로 바뀐다'] = function()
   -- Given: 1번째 줄에 "처음 코멘트"가 있고 커서가 그 줄에 있다.
   write_file(project .. '/a.md', { '하나' })
@@ -431,8 +420,6 @@ I['내용 없이 :Nitpick edit을 실행하면 입력창에 기존 코멘트가 
       })
   )
 end
-
--- 사례 34 ---------------------------------------------------------------------
 
 T['메시지 버퍼(:Nitpick paste)'] = MiniTest.new_set()
 
@@ -476,7 +463,6 @@ T['메시지 버퍼(:Nitpick paste)'][':Nitpick paste는 nofile 마크다운 버
   )
 end
 
--- 사례 53~62 ------------------------------------------------------------------
 -- 비슷한 위치에 단 어노테이션이 여럿이면 :Nitpick remove / edit이 고르는 창(vim.ui.select)을 띄운다.
 -- 테스트에서는 고르는 창을 가짜로 바꿔, 항목을 format_item으로 보여 준 모양을 _G.selects에 기록하고
 -- _G.next_choice번째 항목을 고른 것처럼 돌려준다(nil이면 취소).
@@ -535,7 +521,7 @@ local BOTH_COMMENTS = HEADER
     '',
   })
 
--- 사례 53 (보강)
+-- 고르는 창(vim.ui.select)을 부르지 않는 것까지 확인한다.
 P[':Nitpick remove는 후보가 하나면 고르는 창 없이 바로 지운다'] = function()
   -- Given: 1번째 줄에만 코멘트가 있고 커서가 그 줄에 있다.
   write_file(project .. '/a.md', { '하나', '둘' })
@@ -551,7 +537,6 @@ P[':Nitpick remove는 후보가 하나면 고르는 창 없이 바로 지운다'
   eq(feedback(), vim.NIL)
 end
 
--- 사례 54
 -- 두 번째 항목을 골랐을 때 줄 코멘트가 지워지면, 항목이 정렬 순서(단어 → 줄)대로 놓였다는 뜻이다.
 P[':Nitpick remove는 후보가 여럿이면 고르는 창을 띄우고 고른 어노테이션만 지운다'] = function()
   -- Given: 고르는 창에서 두 번째 항목을 고른다.
@@ -580,7 +565,6 @@ P[':Nitpick remove는 후보가 여럿이면 고르는 창을 띄우고 고른 �
   )
 end
 
--- 사례 55
 -- 항목 모양은 위치, 종류, 내용이다. 여러 줄인 코멘트는 첫 줄만 보여 준다.
 P['고르는 창의 항목은 위치, 종류, 내용을 보여 준다'] = function()
   -- Given: 1번째 줄 삭제 표시, 1~2번째 줄의 두 줄짜리 코멘트, 전체 코멘트가 있고 커서는 1번째 줄에 있다.
@@ -598,7 +582,6 @@ P['고르는 창의 항목은 위치, 종류, 내용을 보여 준다'] = functi
   eq(child.lua_get('_G.selects'), { { 'L1 deletion: "하나"', 'L1–2 comment: 첫 줄', '[전체] 전체 코멘트' } })
 end
 
--- 사례 56
 P['고르는 창에서 취소하면 :Nitpick remove는 아무것도 지우지 않는다'] = function()
   -- Given: 고르는 창에서 아무것도 고르지 않는다(_G.next_choice = nil).
   given_line_and_word_comments()
@@ -611,7 +594,6 @@ P['고르는 창에서 취소하면 :Nitpick remove는 아무것도 지우지 �
   eq(feedback(), BOTH_COMMENTS)
 end
 
--- 사례 57
 P[':Nitpick remove는 커서 위치에 어노테이션이 없으면 경고를 띄운다'] = function()
   -- Given: 1번째 줄에 코멘트가 있고 커서는 2번째 줄에 있다.
   write_file(project .. '/a.md', { '하나', '둘' })
@@ -642,7 +624,6 @@ P[':Nitpick remove는 커서 위치에 어노테이션이 없으면 경고를 �
   )
 end
 
--- 사례 57-1
 P['커서가 첫 줄에 있으면 :Nitpick remove로 파일 전체 코멘트를 지울 수 있다'] = function()
   -- Given: 전체 코멘트만 있고 커서는 1번째 줄에 있다.
   write_file(project .. '/a.md', { '하나', '둘' })
@@ -657,7 +638,6 @@ P['커서가 첫 줄에 있으면 :Nitpick remove로 파일 전체 코멘트를 
   eq(feedback(), vim.NIL)
 end
 
--- 사례 58
 P[':Nitpick edit의 후보에는 삭제 표시가 들어가지 않는다'] = function()
   -- Given: 같은 줄에 삭제 표시를 먼저, 코멘트를 나중에 단다.
   write_file(project .. '/a.md', { '하나' })
@@ -694,7 +674,6 @@ P[':Nitpick edit의 후보에는 삭제 표시가 들어가지 않는다'] = fun
   )
 end
 
--- 사례 60
 P[':Nitpick edit은 후보가 여럿이면 먼저 고르고, 고른 코멘트를 기본값으로 입력창을 연 뒤 그 코멘트만 바꾼다'] = function()
   -- Given: 고르는 창에서 두 번째 항목(줄 코멘트)을 고르고, 입력창에 "고친 줄 코멘트"를 입력한다.
   given_line_and_word_comments()
@@ -727,9 +706,9 @@ P[':Nitpick edit은 후보가 여럿이면 먼저 고르고, 고른 코멘트를
   )
 end
 
--- 사례 60-1 (버그 재현)
+-- 버그 재현: 고른 뒤의 처리를 nvim_buf_call로 감싸서 포커스가 편집 창으로 돌아갔다.
 -- snacks, telescope 같은 고르는 창은 자기 float 창에서 on_choice를 부르고, 입력창은 새 float 창을 열어 포커스를 옮긴다.
--- 이 사례에서만 두 창을 그렇게 동작하는 가짜로 바꾼다.
+-- 이 테스트에서만 두 창을 그렇게 동작하는 가짜로 바꾼다.
 P['후보가 여럿인 :Nitpick edit에서 고른 뒤 입력창이 자기 창을 열면 포커스는 그 입력창에 있다'] = function()
   -- Given: 고르는 창은 float 창을 연 상태에서 두 번째 항목을 고르고, 입력창은 float 창을 열어 포커스를 옮긴다.
   given_line_and_word_comments()
@@ -758,7 +737,6 @@ P['후보가 여럿인 :Nitpick edit에서 고른 뒤 입력창이 자기 창을
   eq(child.api.nvim_get_current_win(), child.lua_get('_G.input_win'))
 end
 
--- 사례 61 (고르는 창 취소)
 P[':Nitpick edit의 고르는 창에서 취소하면 입력창을 열지 않고 아무것도 바꾸지 않는다'] = function()
   -- Given: 고르는 창에서 아무것도 고르지 않는다(_G.next_choice = nil).
   given_line_and_word_comments()
@@ -772,7 +750,6 @@ P[':Nitpick edit의 고르는 창에서 취소하면 입력창을 열지 않고 
   eq(feedback(), BOTH_COMMENTS)
 end
 
--- 사례 61 (입력창 취소)
 P[':Nitpick edit에서 고른 뒤 입력창을 취소하면 아무것도 바꾸지 않는다'] = function()
   -- Given: 고르는 창에서 두 번째 항목을 고르고, 입력창은 취소한다(_G.next_input = nil).
   given_line_and_word_comments()
@@ -787,7 +764,7 @@ P[':Nitpick edit에서 고른 뒤 입력창을 취소하면 아무것도 바꾸�
   eq(feedback(), BOTH_COMMENTS)
 end
 
--- 사례 62 (현재 동작 기록: 기존에 테스트가 없던 경고를 변경 전에 고정한다)
+-- 기존에 테스트가 없던 경고를 고정한다.
 P[':Nitpick edit은 커서 위치에 코멘트가 없으면 경고를 띄운다'] = function()
   -- Given: 커서 줄에는 삭제 표시만 있다.
   write_file(project .. '/a.md', { '하나' })
@@ -803,9 +780,8 @@ P[':Nitpick edit은 커서 위치에 코멘트가 없으면 경고를 띄운다'
   eq(child.lua_get('#_G.prompts'), 0)
 end
 
--- 사례 76~89 ------------------------------------------------------------------
 -- 라벨(:Nitpick label). 라벨은 미리 정해 둔 코멘트이고, 고칠 수 없으며 달고 지우기만 한다.
--- 고르는 창(vim.ui.select), 입력창(vim.ui.input), 알림(vim.notify)은 위 사례 53~62와 같은 방식으로 가짜로 바꿔 기록한다.
+-- 고르는 창(vim.ui.select), 입력창(vim.ui.input), 알림(vim.notify)은 위 겹친 어노테이션 테스트와 같은 방식으로 가짜로 바꿔 기록한다.
 
 T['라벨(:Nitpick label)'] = MiniTest.new_set({
   hooks = {
@@ -855,7 +831,6 @@ local function completions(cmd_line)
   return child.fn.getcompletion(cmd_line, 'cmdline')
 end
 
--- 사례 78
 B['visual 글자 단위 선택에서 :Nitpick label {id}를 실행하면 선택한 글자에 그 라벨을 단다'] = function()
   -- Given: 2번째 줄 "가나 다라마 바"에서 "다라마"를 글자 단위(v)로 선택한다.
   write_file(project .. '/a.md', { '첫 줄', '가나 다라마 바' })
@@ -887,7 +862,6 @@ B['visual 글자 단위 선택에서 :Nitpick label {id}를 실행하면 선택�
   )
 end
 
--- 사례 78
 B['범위 없이 :Nitpick label {id}를 실행하면 커서 줄 전체에 라벨을 단다'] = function()
   -- Given: 커서가 1번째 줄 "하나"에 있다.
   write_file(project .. '/a.md', { '하나', '둘' })
@@ -901,7 +875,6 @@ B['범위 없이 :Nitpick label {id}를 실행하면 커서 줄 전체에 라벨
   eq(feedback(), ONE_CLARIFY_LABEL)
 end
 
--- 사례 79
 B['id 없이 :Nitpick label을 실행하면 고르는 창에 라벨을 설정 순서대로 보여 주고 고른 라벨을 단다'] = function()
   -- Given: 라벨 두 개를 설정했고, 고르는 창에서 두 번째 항목(🧹 Cleanup)을 고른다.
   child.lua([[require('nitpick').setup({ labels = {
@@ -937,7 +910,6 @@ B['id 없이 :Nitpick label을 실행하면 고르는 창에 라벨을 설정 �
   )
 end
 
--- 사례 80
 B['라벨 고르는 창에서 취소하면 아무것도 추가하지 않는다'] = function()
   -- Given: 고르는 창에서 아무것도 고르지 않는다(_G.next_choice = nil).
   write_file(project .. '/a.md', { '하나' })
@@ -951,7 +923,6 @@ B['라벨 고르는 창에서 취소하면 아무것도 추가하지 않는다']
   eq(feedback(), vim.NIL)
 end
 
--- 사례 81
 B['없는 id를 넘기면 라벨을 달지 않고 쓸 수 있는 id 목록과 함께 ERROR로 알린다'] = function()
   -- Given: 라벨 bug, cleanup을 설정했다.
   child.lua([[require('nitpick').setup({ labels = {
@@ -971,7 +942,6 @@ B['없는 id를 넘기면 라벨을 달지 않고 쓸 수 있는 id 목록과 �
   eq(feedback(), vim.NIL)
 end
 
--- 사례 76
 -- labels = {}는 "라벨을 쓰지 않겠다"는 뜻이다. 원본처럼 기본 라벨로 되돌리지 않는다.
 B['labels = {}로 설정하면 라벨이 없어서 :Nitpick label은 경고만 띄운다'] = function()
   -- Given
@@ -989,13 +959,11 @@ B['labels = {}로 설정하면 라벨이 없어서 :Nitpick label은 경고만 �
   eq(feedback(), vim.NIL)
 end
 
--- 사례 82
 B['하위 명령 자동 완성에 label이 들어간다'] = function()
   -- When / Then
   eq(completions('Nitpick la'), { 'label' })
 end
 
--- 사례 83
 B[':Nitpick label 다음 인자는 라벨 id로 자동 완성되고, 다른 하위 명령 다음 인자는 완성하지 않는다'] = function()
   -- Given: 라벨 bug, perf를 설정했다.
   child.lua([[require('nitpick').setup({ labels = {
@@ -1009,7 +977,6 @@ B[':Nitpick label 다음 인자는 라벨 id로 자동 완성되고, 다른 하�
   eq(completions('Nitpick comment '), {})
 end
 
--- 사례 84
 B[':Nitpick paste 메시지 버퍼에 단 라벨은 메시지 형식으로 복사된다'] = function()
   -- Given: 메시지 버퍼를 열어 답변을 붙여넣는다.
   child.cmd('Nitpick paste')
@@ -1051,7 +1018,6 @@ B[':Nitpick paste 메시지 버퍼에 단 라벨은 메시지 형식으로 복�
   )
 end
 
--- 사례 86
 B['커서 위치에 라벨만 있으면 :Nitpick edit은 코멘트가 없다고 경고하고 라벨을 바꾸지 않는다'] = function()
   -- Given: 1번째 줄에 라벨만 있다.
   write_file(project .. '/a.md', { '하나' })
@@ -1068,7 +1034,6 @@ B['커서 위치에 라벨만 있으면 :Nitpick edit은 코멘트가 없다고 
   eq(feedback(), ONE_CLARIFY_LABEL)
 end
 
--- 사례 87
 B['라벨과 코멘트가 겹친 위치에서 :Nitpick edit은 고르는 창 없이 코멘트만 고친다'] = function()
   -- Given: 1번째 줄에 코멘트를 먼저, 같은 범위에 라벨을 나중에 달았다.
   --   범위가 같으면 나중에 단 것이 앞에 오므로, 라벨을 건너뛰지 않으면 후보가 둘이 된다.
@@ -1107,7 +1072,6 @@ B['라벨과 코멘트가 겹친 위치에서 :Nitpick edit은 고르는 창 없
   )
 end
 
--- 사례 88
 B[':Nitpick remove로 라벨을 지울 수 있다'] = function()
   -- Given: 1번째 줄에 라벨만 있다.
   write_file(project .. '/a.md', { '하나' })
@@ -1123,7 +1087,6 @@ B[':Nitpick remove로 라벨을 지울 수 있다'] = function()
   eq(feedback(), vim.NIL)
 end
 
--- 사례 88, 89
 B['라벨과 코멘트가 겹치면 :Nitpick remove의 고르는 창에 라벨도 "L1 label: <라벨>" 모양으로 들어간다'] = function()
   -- Given: 1번째 줄에 라벨을 먼저, 같은 범위에 코멘트를 나중에 달았다. 고르는 창에서 두 번째 항목을 고른다.
   write_file(project .. '/a.md', { '하나' })

@@ -87,7 +87,6 @@ nvim --headless --noplugin -u scripts/minimal_init.lua -c "lua MiniTest.run_file
 - **child Neovim**: 테스트마다 `scripts/minimal_init.lua`로 새 Neovim을 띄우고 임시 디렉터리를 cwd로 씁니다. 사용 중인 Neovim 설정은 쓰지 않습니다.
 - **클립보드**: 실제 시스템 클립보드를 덮어쓰지 않도록 가짜 provider(`vim.g.clipboard`)를 넣습니다. "provider 없음"은 `--cmd 'let g:loaded_clipboard_provider = 1'`로 만듭니다.
 - **입력창**: `vim.ui.input`을 가짜로 바꿔, 미리 정해 둔 값을 입력한 것처럼 돌려줍니다.
-- 테스트 사례와 근거는 [`test-list.md`](test-list.md)에 있습니다.
 
 ## 화면을 텍스트로 확인하기
 

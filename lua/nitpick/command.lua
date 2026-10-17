@@ -1,4 +1,5 @@
 -- :Nitpick {sub} 명령. 키맵은 만들지 않고, 사용자가 이 명령에 직접 키를 매핑한다.
+local labels = require('nitpick.labels')
 local review = require('nitpick.review')
 
 local M = {}
@@ -78,6 +79,33 @@ local subcommands = {
   delete = function(args)
     review.delete(command_range(args))
   end,
+  label = function(args, id)
+    local range = command_range(args)
+    if id ~= '' then
+      local label = labels.find(id)
+      if not label then
+        local ids = vim.tbl_map(function(l) return l.id end, labels.list())
+        vim.notify(('nitpick: 알 수 없는 라벨입니다: %s (%s)'):format(id, table.concat(ids, ', ')), vim.log.levels.ERROR)
+        return
+      end
+      review.label(range, label)
+      return
+    end
+    if #labels.list() == 0 then
+      vim.notify('nitpick: 라벨이 없습니다.', vim.log.levels.WARN)
+      return
+    end
+    -- 고르는 창은 비동기일 수 있으므로 버퍼를 먼저 잡아 두고 그 버퍼에서 라벨을 단다.
+    local bufnr = vim.api.nvim_get_current_buf()
+    vim.ui.select(labels.list(), { prompt = 'Nitpick label: ', format_item = labels.display }, function(label)
+      if label == nil or not vim.api.nvim_buf_is_valid(bufnr) then
+        return
+      end
+      vim.api.nvim_buf_call(bufnr, function()
+        review.label(range, label)
+      end)
+    end)
+  end,
   global = function(_, text)
     with_text(text, { prompt = 'Nitpick global comment: ' }, review.global)
   end,
@@ -127,13 +155,17 @@ function M.run(args)
 end
 
 function M.complete(arg_lead, cmd_line)
-  -- 첫 번째 인자(하위 명령)만 완성한다.
-  if cmd_line:match('Nitpick%s+%S+%s') then
+  -- 첫 번째 인자(하위 명령)를 완성하고, label 다음 인자는 라벨 id로 완성한다.
+  local candidates = M.names
+  local name = cmd_line:match('Nitpick%s+(%S+)%s')
+  if name == 'label' then
+    candidates = vim.tbl_map(function(label) return label.id end, labels.list())
+  elseif name then
     return {}
   end
-  return vim.tbl_filter(function(name)
-    return vim.startswith(name, arg_lead)
-  end, M.names)
+  return vim.tbl_filter(function(candidate)
+    return vim.startswith(candidate, arg_lead)
+  end, candidates)
 end
 
 return M

@@ -24,7 +24,7 @@ local function lines(list)
   return table.concat(list, '\n')
 end
 
--- 메시지 리뷰의 머리말. 사례 13에서 문자 그대로 검증하고, 나머지 테스트에서는 이 상수로 줄여 쓴다.
+-- 메시지 리뷰의 머리말. 첫 테스트에서 문자 그대로 검증하고, 나머지 테스트에서는 이 상수로 줄여 쓴다.
 local HEADER = lines({
   '# Message Feedback',
   '',
@@ -41,7 +41,6 @@ local T = MiniTest.new_set()
 T['메시지 리뷰 피드백(message_feedback)'] = MiniTest.new_set()
 local S = T['메시지 리뷰 피드백(message_feedback)']
 
--- 사례 13
 S['머리말, 메시지 발췌, 메시지 피드백 순서로 출력하고 주체(subject)를 message로 쓴다'] = function()
   -- Given: 붙여넣은 답변에 전체 코멘트, 한 줄 코멘트, 삭제 표시가 하나씩 있다.
   local message = {
@@ -96,7 +95,6 @@ S['머리말, 메시지 발췌, 메시지 피드백 순서로 출력하고 주�
   )
 end
 
--- 사례 14
 -- 원본은 1200 "글자"에서 자른다. 바이트가 아니라 글자 수이므로 한글로 검증한다.
 S['1200자를 넘는 메시지는 발췌문을 1200자에서 자르고 ...을 붙인다'] = function()
   -- Given: 한글 '가'가 1201자인 메시지다.
@@ -129,7 +127,6 @@ S['1200자를 넘는 메시지는 발췌문을 1200자에서 자르고 ...을 �
   )
 end
 
--- 사례 15
 S['메시지 본문에 ``` 펜스가 있으면 발췌문을 더 긴 ```` 펜스로 감싼다'] = function()
   -- Given: 붙여넣은 답변 안에 코드 블록이 있다.
   local message = {
@@ -160,6 +157,46 @@ S['메시지 본문에 ``` 펜스가 있으면 발췌문을 더 긴 ```` 펜스�
         '> 좋아.',
         '',
         '---',
+      })
+  )
+end
+
+-- 메시지 형식에서는 라벨 요약(Label Summary)이 구분선(---) 뒤에 "##" 제목으로 붙고,
+-- 원본이 끝 공백을 지우므로(trimEnd) 요약 목록의 마지막 줄로 끝난다.
+S['라벨이 있으면 구분선(---) 뒤에 ## Label Summary를 붙이고 끝 공백 없이 끝난다'] = function()
+  -- Given: 붙여넣은 답변 3번째 줄에 라벨 "❓ Clarify this"를 달았다.
+  local message = {
+    text = '# 계획\n\n첫 단계를 진행합니다.',
+    annotations = {
+      { kind = 'label', start_line = 3, end_line = 3, original_text = '첫 단계', text = '❓ Clarify this' },
+    },
+  }
+
+  -- When
+  local output = message_feedback(message)
+
+  -- Then
+  eq(
+    output,
+    HEADER
+      .. lines({
+        '```markdown',
+        '# 계획',
+        '',
+        '첫 단계를 진행합니다.',
+        '```',
+        '',
+        '# Feedback for Message 1',
+        '',
+        "I've reviewed this message and have 1 piece of feedback:",
+        '',
+        '## 1. (line 3) [❓ Clarify this] Feedback on: "첫 단계"',
+        '',
+        '---',
+        '',
+        '## Label Summary',
+        '',
+        '- **❓ Clarify this**: 1',
       })
   )
 end

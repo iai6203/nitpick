@@ -59,6 +59,12 @@ local function render_entry(ann, number, subject, level)
   elseif ann.kind == 'comment' then
     out = out .. 'Feedback on: "' .. ann.original_text .. '"\n'
     out = out .. '> ' .. ann.text .. '\n'
+  elseif ann.kind == 'label' then
+    -- 원본의 isQuickLabel 코멘트: 코멘트 인용 대신 tip이 있으면 tip을 인용한다.
+    out = out .. '[' .. ann.text .. '] Feedback on: "' .. ann.original_text .. '"\n'
+    if ann.tip then
+      out = out .. '> ' .. ann.tip .. '\n'
+    end
   elseif ann.kind == 'global' then
     out = out .. 'General feedback about the ' .. subject .. '\n'
     out = out .. '> ' .. ann.text .. '\n'
@@ -70,6 +76,28 @@ local function pieces(count)
   return ('%d piece%s'):format(count, count ~= 1 and 's' or '')
 end
 
+-- 원본 labelSummaryBlock: 라벨 본문별 개수를 문서 순서에서 처음 나온 순서대로. 라벨이 없으면 ''.
+local function label_summary(sorted, level)
+  local order, counts = {}, {}
+  for _, ann in ipairs(sorted) do
+    if ann.kind == 'label' then
+      if not counts[ann.text] then
+        table.insert(order, ann.text)
+        counts[ann.text] = 0
+      end
+      counts[ann.text] = counts[ann.text] + 1
+    end
+  end
+  if #order == 0 then
+    return ''
+  end
+  local out = ('#'):rep(level) .. ' Label Summary\n\n'
+  for _, text in ipairs(order) do
+    out = out .. ('- **%s**: %d\n'):format(text, counts[text])
+  end
+  return out .. '\n'
+end
+
 --- 여러 파일의 어노테이션을 원본의 묶음 형식(BUNDLE_DOC_EXPORT_HEADING)으로 직렬화한다.
 ---@param documents { path: string, annotations: table[] }[] 처음 어노테이션을 단 순서
 ---@return string
@@ -79,9 +107,11 @@ function M.file_feedback(documents)
     if #doc.annotations > 0 then
       out = out .. '## ' .. doc.path .. '\n\n'
       out = out .. "I've reviewed this document and have " .. pieces(#doc.annotations) .. ' of feedback:\n\n'
-      for number, ann in ipairs(sort_in_document_order(doc.annotations)) do
+      local sorted = sort_in_document_order(doc.annotations)
+      for number, ann in ipairs(sorted) do
         out = out .. render_entry(ann, number, 'document', 3)
       end
+      out = out .. label_summary(sorted, 3)
     end
   end
   return out .. '---\n'
@@ -119,10 +149,15 @@ function M.message_feedback(message)
   out = out .. fenced_block(excerpt_message_text(message.text), 'markdown') .. '\n'
   out = out .. '# Feedback for Message 1\n\n'
   out = out .. "I've reviewed this message and have " .. pieces(#message.annotations) .. ' of feedback:\n\n'
-  for number, ann in ipairs(sort_in_document_order(message.annotations)) do
+  local sorted = sort_in_document_order(message.annotations)
+  for number, ann in ipairs(sorted) do
     out = out .. render_entry(ann, number, 'message', 2)
   end
   out = out .. '---\n'
+  local summary = label_summary(sorted, 2)
+  if summary ~= '' then
+    out = out .. '\n' .. summary
+  end
   -- 원본은 전체 출력에 trimEnd()를 적용한다.
   return (out:gsub('%s+$', ''))
 end

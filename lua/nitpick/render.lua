@@ -1,4 +1,4 @@
--- 어노테이션을 화면에 그린다: 범위 하이라이트와 코멘트 가상 줄(virt_lines).
+-- 어노테이션을 화면에 그린다: 범위 하이라이트와 코멘트·라벨 가상 줄(virt_lines).
 -- 위치 추적용 extmark('nitpick')와 섞이지 않도록 표시는 별도 네임스페이스에 그린다.
 local M = {}
 
@@ -9,6 +9,9 @@ local function define_highlights()
   vim.api.nvim_set_hl(0, 'NitpickComment', { link = 'DiagnosticUnderlineInfo', default = true })
   vim.api.nvim_set_hl(0, 'NitpickCommentText', { link = 'Comment', default = true })
   vim.api.nvim_set_hl(0, 'NitpickDelete', { strikethrough = true, default = true })
+  -- 라벨만 다른 색으로 바꿀 수 있도록 따로 두고, 기본은 코멘트와 같은 모양이다.
+  vim.api.nvim_set_hl(0, 'NitpickLabel', { link = 'NitpickComment', default = true })
+  vim.api.nvim_set_hl(0, 'NitpickLabelText', { link = 'NitpickCommentText', default = true })
 end
 
 define_highlights()
@@ -19,13 +22,15 @@ vim.api.nvim_create_autocmd('ColorScheme', {
   callback = define_highlights,
 })
 
-local function comment_lines(prefix, text)
+local function comment_lines(prefix, text, hl_group)
   local lines = {}
   for _, line in ipairs(vim.split(text, '\n', { plain = true })) do
-    table.insert(lines, { { '  ↳ ' .. prefix .. line, 'NitpickCommentText' } })
+    table.insert(lines, { { '  ↳ ' .. prefix .. line, hl_group or 'NitpickCommentText' } })
   end
   return lines
 end
+
+local RANGE_HIGHLIGHTS = { comment = 'NitpickComment', deletion = 'NitpickDelete', label = 'NitpickLabel' }
 
 -- 첫 줄 위의 가상 줄은 창이 그만큼 위로 스크롤된 상태(topfill)여야 보인다.
 -- 이 버퍼를 첫 줄부터 보여 주는 창마다 topfill을 맞춘다.
@@ -59,15 +64,18 @@ function M.draw(bufnr, items)
       vim.api.nvim_buf_set_extmark(bufnr, ns, start_row, start_col, {
         end_row = end_row,
         end_col = end_col,
-        hl_group = item.kind == 'deletion' and 'NitpickDelete' or 'NitpickComment',
+        hl_group = RANGE_HIGHLIGHTS[item.kind],
         strict = false,
       })
+      -- 가상 줄은 extmark의 시작 줄 아래에 붙으므로 범위의 끝 줄에 따로 단다.
+      local lines
       if item.kind == 'comment' then
-        -- 가상 줄은 extmark의 시작 줄 아래에 붙으므로 범위의 끝 줄에 따로 단다.
-        vim.api.nvim_buf_set_extmark(bufnr, ns, end_row, 0, {
-          virt_lines = comment_lines('', item.text),
-          strict = false,
-        })
+        lines = comment_lines('', item.text)
+      elseif item.kind == 'label' then
+        lines = comment_lines('', '[' .. item.text .. ']', 'NitpickLabelText')
+      end
+      if lines then
+        vim.api.nvim_buf_set_extmark(bufnr, ns, end_row, 0, { virt_lines = lines, strict = false })
       end
     end
   end

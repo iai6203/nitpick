@@ -1,0 +1,114 @@
+-- :Nitpick {sub} 명령. 키맵은 만들지 않고, 사용자가 이 명령에 직접 키를 매핑한다.
+local review = require('nitpick.review')
+
+local M = {}
+
+-- 명령의 범위를 리뷰 범위(range) = { start_line, start_col, end_line, end_col }로 바꾼다.
+-- visual 글자 단위(v)로 고른 범위면 선택한 글자만, 아니면 줄 전체를 쓴다.
+local function command_range(args)
+  local line1, line2 = args.line1, args.line2
+  if args.range == 0 then
+    line1 = vim.api.nvim_win_get_cursor(0)[1]
+    line2 = line1
+  end
+  local start_pos, end_pos = vim.fn.getpos("'<"), vim.fn.getpos("'>")
+  if args.range > 0 and vim.fn.visualmode() == 'v' and start_pos[2] == line1 and end_pos[2] == line2 then
+    local end_line = vim.fn.getline(line2)
+    -- '> 의 열은 마지막 글자의 첫 바이트(1부터)다. 그 글자의 끝까지 포함하도록 늘린다.
+    local end_col = math.min(end_pos[3], #end_line)
+    if end_col > 0 then
+      end_col = end_col + vim.str_utf_end(end_line, end_col)
+    end
+    return { line1, start_pos[3] - 1, line2, end_col }
+  end
+  return { line1, 0, line2, #vim.fn.getline(line2) }
+end
+
+-- 코멘트 내용을 인자에서 읽고, 없으면 입력창(vim.ui.input)으로 받는다.
+-- 입력창은 비동기일 수 있으므로 버퍼를 먼저 잡아 두고 그 버퍼에서 on_text를 실행한다.
+local function with_text(text, input_opts, on_text)
+  if text ~= '' then
+    on_text(text)
+    return
+  end
+  local bufnr = vim.api.nvim_get_current_buf()
+  vim.ui.input(input_opts, function(input)
+    if input == nil or input == '' or not vim.api.nvim_buf_is_valid(bufnr) then
+      return
+    end
+    vim.api.nvim_buf_call(bufnr, function()
+      on_text(input)
+    end)
+  end)
+end
+
+local function open_message_buffer()
+  vim.cmd('tabnew')
+  local bufnr = vim.api.nvim_get_current_buf()
+  vim.bo[bufnr].buftype = 'nofile'
+  vim.bo[bufnr].bufhidden = 'hide'
+  vim.bo[bufnr].swapfile = false
+  vim.bo[bufnr].filetype = 'markdown'
+  review.mark_message_buffer(bufnr)
+end
+
+local subcommands = {
+  comment = function(args, text)
+    local range = command_range(args)
+    with_text(text, { prompt = 'Nitpick comment: ' }, function(input)
+      review.comment(range, input)
+    end)
+  end,
+  delete = function(args)
+    review.delete(command_range(args))
+  end,
+  global = function(_, text)
+    with_text(text, { prompt = 'Nitpick global comment: ' }, review.global)
+  end,
+  edit = function(_, text)
+    local current = review.text_at_cursor()
+    if text == '' and current == nil then
+      vim.notify('nitpick: 커서 위치에 코멘트가 없습니다.', vim.log.levels.WARN)
+      return
+    end
+    with_text(text, { prompt = 'Nitpick edit: ', default = current }, review.edit_at_cursor)
+  end,
+  remove = function()
+    review.remove_at_cursor()
+  end,
+  clear = function()
+    review.clear()
+  end,
+  copy = function()
+    require('nitpick.copy').copy()
+  end,
+  paste = function()
+    open_message_buffer()
+  end,
+}
+
+M.names = vim.tbl_keys(subcommands)
+table.sort(M.names)
+
+--- :Nitpick 명령을 실행한다(nvim_create_user_command의 args).
+function M.run(args)
+  local name, text = args.args:match('^(%S*)%s*(.-)%s*$')
+  local subcommand = subcommands[name]
+  if not subcommand then
+    vim.notify(('nitpick: 알 수 없는 명령입니다: %s (%s)'):format(name, table.concat(M.names, ', ')), vim.log.levels.ERROR)
+    return
+  end
+  subcommand(args, text)
+end
+
+function M.complete(arg_lead, cmd_line)
+  -- 첫 번째 인자(하위 명령)만 완성한다.
+  if cmd_line:match('Nitpick%s+%S+%s') then
+    return {}
+  end
+  return vim.tbl_filter(function(name)
+    return vim.startswith(name, arg_lead)
+  end, M.names)
+end
+
+return M

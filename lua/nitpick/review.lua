@@ -48,6 +48,9 @@ local function current_document(bufnr)
   return path and document_for('path', path)
 end
 
+-- 어노테이션을 단 순서. 범위가 같은 후보 중 나중에 단 것을 앞에 두는 데 쓴다.
+local next_seq = 0
+
 local function add(ann, range)
   local bufnr = vim.api.nvim_get_current_buf()
   local doc = current_document(bufnr)
@@ -61,6 +64,8 @@ local function add(ann, range)
     ann.mark_id = vim.api.nvim_buf_set_extmark(bufnr, ns, start_row, start_col, { end_row = end_row, end_col = end_col })
   end
   ann.bufnr = bufnr
+  next_seq = next_seq + 1
+  ann.seq = next_seq
   table.insert(doc.annotations, ann)
   redraw(bufnr)
   return true
@@ -170,20 +175,80 @@ vim.api.nvim_create_autocmd('BufWinEnter', {
   end,
 })
 
--- 현재 버퍼에서 커서 줄을 범위에 포함하는 어노테이션의 문서와 위치(index)를 찾는다.
-local function find_at_cursor()
+-- 커서(0부터 센 row, col)가 범위 안에 드는지. 빈 범위는 그 위치에 커서가 있을 때 안에 든다.
+local function contains(start_row, start_col, end_row, end_col, row, col)
+  local after_start = row > start_row or (row == start_row and col >= start_col)
+  local before_end = row < end_row or (row == end_row and col < end_col)
+  local empty = start_row == end_row and start_col == end_col
+  return after_start and (before_end or (empty and row == start_row and col == start_col))
+end
+
+--- 커서 위치의 후보 어노테이션. 가장 유력한 후보가 먼저 온다.
+--- 커서 줄을 범위에 포함하는 어노테이션이 후보이고, 커서가 첫 줄에 있으면 파일 전체 코멘트도 맨 뒤에 들어간다.
+--- 순서: 커서 열까지 범위 안에 드는 것 → 줄 수가 적은 것 → 글자 수가 적은 것 → 나중에 단 것
+function M.annotations_at_cursor()
   local bufnr = vim.api.nvim_get_current_buf()
-  local line = vim.api.nvim_win_get_cursor(0)[1]
+  local cursor = vim.api.nvim_win_get_cursor(0)
+  local line, row, col = cursor[1], cursor[1] - 1, cursor[2]
+  local found = {}
   for _, doc in ipairs(documents) do
-    for index, ann in ipairs(doc.annotations) do
-      if ann.bufnr == bufnr and (ann.mark_id or ann.saved_range) then
-        local start_line, _, end_line = position(ann)
-        if start_line <= line and line <= end_line then
-          return doc, index
+    for _, ann in ipairs(doc.annotations) do
+      if ann.bufnr == bufnr then
+        if ann.mark_id or ann.saved_range then
+          local start_line, _, end_line = position(ann)
+          if start_line <= line and line <= end_line then
+            local start_row, start_col, end_row, end_col = mark_range(ann)
+            table.insert(found, {
+              ann = ann,
+              outside = contains(start_row, start_col, end_row, end_col, row, col) and 0 or 1,
+              lines = end_line - start_line,
+              chars = end_col - start_col,
+            })
+          end
+        elseif ann.kind == 'global' and line == 1 then
+          table.insert(found, { ann = ann, global = true })
         end
       end
     end
   end
+  table.sort(found, function(a, b)
+    if (a.global or false) ~= (b.global or false) then
+      return not a.global
+    end
+    if not a.global then
+      if a.outside ~= b.outside then
+        return a.outside < b.outside
+      end
+      if a.lines ~= b.lines then
+        return a.lines < b.lines
+      end
+      if a.chars ~= b.chars then
+        return a.chars < b.chars
+      end
+    end
+    return a.ann.seq > b.ann.seq
+  end)
+  return vim.tbl_map(function(item) return item.ann end, found)
+end
+
+--- 커서 위치에서 코멘트를 고칠 수 있는 후보. 삭제 표시는 코멘트가 없으므로 빠진다.
+function M.comments_at_cursor()
+  return vim.tbl_filter(function(ann) return ann.text ~= nil end, M.annotations_at_cursor())
+end
+
+--- 고르는 창에 보여 줄 어노테이션 설명. 예: `L3 comment: 내용`, `L1–5 deletion: "원문"`, `[전체] 내용`
+---@return string
+function M.describe(ann)
+  local function first_line(text)
+    return vim.split(text, '\n', { plain = true })[1]
+  end
+  if ann.kind == 'global' then
+    return '[전체] ' .. first_line(ann.text)
+  end
+  local start_line, _, end_line = position(ann)
+  local where = start_line == end_line and ('L%d'):format(start_line) or ('L%d–%d'):format(start_line, end_line)
+  local content = ann.kind == 'deletion' and ('"%s"'):format(first_line(ann.original_text)) or first_line(ann.text)
+  return ('%s %s: %s'):format(where, ann.kind, content)
 end
 
 function M.comment(range, text)
@@ -198,34 +263,47 @@ function M.global(text)
   return add({ kind = 'global', text = text }, nil)
 end
 
-function M.remove_at_cursor()
-  local doc, index = find_at_cursor()
-  if not doc then
-    return false
+--- 어노테이션(annotations_at_cursor가 돌려준 것)을 지운다.
+function M.remove(ann)
+  for _, doc in ipairs(documents) do
+    for index, candidate in ipairs(doc.annotations) do
+      if candidate == ann then
+        table.remove(doc.annotations, index)
+        if ann.mark_id then
+          vim.api.nvim_buf_del_extmark(ann.bufnr, ns, ann.mark_id)
+        end
+        redraw(ann.bufnr)
+        return true
+      end
+    end
   end
-  local ann = table.remove(doc.annotations, index)
-  if ann.mark_id then
-    vim.api.nvim_buf_del_extmark(ann.bufnr, ns, ann.mark_id)
-  end
+  return false
+end
+
+--- 어노테이션(annotations_at_cursor가 돌려준 것)의 코멘트를 바꾼다.
+function M.edit(ann, text)
+  ann.text = text
   redraw(ann.bufnr)
   return true
 end
 
---- 커서 위치 어노테이션의 코멘트. 없거나 코멘트가 없는 어노테이션(삭제 표시)이면 nil.
----@return string?
-function M.text_at_cursor()
-  local doc, index = find_at_cursor()
-  return doc and doc.annotations[index].text
+--- 커서 위치에서 가장 유력한 어노테이션을 지운다.
+function M.remove_at_cursor()
+  local ann = M.annotations_at_cursor()[1]
+  return ann ~= nil and M.remove(ann)
 end
 
+--- 커서 위치에서 가장 유력한 코멘트. 없으면 nil.
+---@return string?
+function M.text_at_cursor()
+  local ann = M.comments_at_cursor()[1]
+  return ann and ann.text
+end
+
+--- 커서 위치에서 가장 유력한 코멘트를 바꾼다.
 function M.edit_at_cursor(text)
-  local doc, index = find_at_cursor()
-  if not doc then
-    return false
-  end
-  doc.annotations[index].text = text
-  redraw(doc.annotations[index].bufnr)
-  return true
+  local ann = M.comments_at_cursor()[1]
+  return ann ~= nil and M.edit(ann, text)
 end
 
 function M.clear()

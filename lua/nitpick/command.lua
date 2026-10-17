@@ -42,6 +42,22 @@ local function with_text(text, input_opts, on_text)
   end)
 end
 
+-- 후보가 하나면 바로, 여럿이면 고르는 창(vim.ui.select)에서 고른 어노테이션으로 on_choice를 실행한다.
+-- 어노테이션은 자기 버퍼를 알고 있으므로 nvim_buf_call로 감싸지 않는다. 감싸면 on_choice에서 연
+-- 입력창의 포커스를 nvim_buf_call이 원래 창으로 되돌려 버린다.
+local function choose(candidates, prompt, on_choice)
+  if #candidates == 1 then
+    on_choice(candidates[1])
+    return
+  end
+  local bufnr = vim.api.nvim_get_current_buf()
+  vim.ui.select(candidates, { prompt = prompt, format_item = review.describe }, function(ann)
+    if ann ~= nil and vim.api.nvim_buf_is_valid(bufnr) then
+      on_choice(ann)
+    end
+  end)
+end
+
 local function open_message_buffer()
   vim.cmd('tabnew')
   local bufnr = vim.api.nvim_get_current_buf()
@@ -66,15 +82,24 @@ local subcommands = {
     with_text(text, { prompt = 'Nitpick global comment: ' }, review.global)
   end,
   edit = function(_, text)
-    local current = review.text_at_cursor()
-    if text == '' and current == nil then
+    local candidates = review.comments_at_cursor()
+    if #candidates == 0 then
       vim.notify('nitpick: 커서 위치에 코멘트가 없습니다.', vim.log.levels.WARN)
       return
     end
-    with_text(text, { prompt = 'Nitpick edit: ', default = current }, review.edit_at_cursor)
+    choose(candidates, 'Nitpick edit: ', function(ann)
+      with_text(text, { prompt = 'Nitpick edit: ', default = ann.text }, function(input)
+        review.edit(ann, input)
+      end)
+    end)
   end,
   remove = function()
-    review.remove_at_cursor()
+    local candidates = review.annotations_at_cursor()
+    if #candidates == 0 then
+      vim.notify('nitpick: 커서 위치에 어노테이션이 없습니다.', vim.log.levels.WARN)
+      return
+    end
+    choose(candidates, 'Nitpick remove: ', review.remove)
   end,
   clear = function()
     review.clear()

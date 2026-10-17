@@ -8,6 +8,9 @@
 --   global(text)          현재 버퍼의 파일 전체에 코멘트를 단다. 성공하면 true
 --   remove_at_cursor()    커서 위치의 어노테이션을 지운다
 --   edit_at_cursor(text)  커서 위치의 어노테이션 코멘트를 바꾼다
+--   text_at_cursor()      커서 위치의 어노테이션 코멘트. 없으면 nil
+--   annotations_at_cursor()  커서 위치의 후보 어노테이션 목록(제안). 가장 유력한 후보가 먼저 온다.
+--     *_at_cursor 함수는 후보가 여럿이면 첫 번째 후보에 동작한다.
 --   clear()               리뷰 전체를 초기화한다
 --   feedback()            파일 리뷰 피드백 텍스트. 어노테이션이 없으면 nil
 --
@@ -256,6 +259,232 @@ S['경로는 cwd 안이면 cwd 기준 상대 경로로, cwd 밖이면 절대 경
         '',
         '### 1. General feedback about the document',
         '> 바깥쪽',
+        '',
+        '---',
+        '',
+      })
+  )
+end
+
+-- 사례 47~52, 64 --------------------------------------------------------------
+-- 비슷한 위치에 단 어노테이션 중 원하는 것을 고를 수 있도록, 커서 위치의 후보를 유력한 순서로 돌려준다.
+
+T['커서 위치의 후보(annotations_at_cursor)'] = MiniTest.new_set()
+local A = T['커서 위치의 후보(annotations_at_cursor)']
+
+-- 후보 목록을 종류(kind)와 코멘트(text)만 남겨 읽는다. 삭제 표시는 코멘트가 없다.
+local function candidates()
+  return child.lua([[
+    return vim.tbl_map(function(ann)
+      return { kind = ann.kind, text = ann.text }
+    end, require('nitpick.review').annotations_at_cursor())
+  ]])
+end
+
+-- 사례 47
+A['커서 줄을 범위에 포함하는 어노테이션은 모두 후보가 되고, 커서 줄에 없는 어노테이션은 빠진다'] = function()
+  -- Given: 1~3번째 줄 코멘트, 2번째 줄 삭제 표시, 3번째 줄 코멘트가 있고 커서는 2번째 줄에 있다.
+  write_file(project .. '/a.md', { '하나', '둘', '셋' })
+  edit(project .. '/a.md')
+  review('comment', { 1, 0, 3, #'셋' }, '넓은 코멘트')
+  review('delete', { 2, 0, 2, #'둘' })
+  review('comment', { 3, 0, 3, #'셋' }, '셋째 줄 코멘트')
+  child.api.nvim_win_set_cursor(0, { 2, 0 })
+
+  -- When
+  local result = candidates()
+
+  -- Then: 순서와 관계없이 2번째 줄을 포함하는 두 어노테이션만 후보다.
+  table.sort(result, function(a, b) return a.kind < b.kind end)
+  eq(result, { { kind = 'comment', text = '넓은 코멘트' }, { kind = 'deletion' } })
+end
+
+-- 사례 48
+-- 열 조건이 범위 너비(사례 49)나 단 순서(사례 50)보다 먼저임을 보이려고,
+-- 커서 열을 포함하는 "다라마"를 더 넓게, 먼저 단다.
+A['커서 열까지 범위 안에 드는 후보가 줄만 겹치는 후보보다 앞에 온다'] = function()
+  -- Given: "가나 다라마 바"에서 "다라마"와 "가나"에 차례로 코멘트를 달고, 커서를 "다" 위에 둔다.
+  write_file(project .. '/a.md', { '가나 다라마 바' })
+  edit(project .. '/a.md')
+  review('comment', { 1, #'가나 ', 1, #'가나 다라마' }, '다라마 코멘트')
+  review('comment', { 1, 0, 1, #'가나' }, '가나 코멘트')
+  child.api.nvim_win_set_cursor(0, { 1, #'가나 ' })
+
+  -- When
+  local result = candidates()
+
+  -- Then
+  eq(result, { { kind = 'comment', text = '다라마 코멘트' }, { kind = 'comment', text = '가나 코멘트' } })
+end
+
+-- 사례 49 (줄 수 비교)
+-- 단 순서(사례 50)와 구별하려고 좁은 범위를 먼저 단다.
+A['커서 열 조건이 같으면 줄 수가 적은 후보가 앞에 온다'] = function()
+  -- Given: 3번째 줄 코멘트를 먼저, 1~5번째 줄 코멘트를 나중에 달고 커서는 3번째 줄에 있다.
+  write_file(project .. '/a.md', { '1', '2', '3', '4', '5' })
+  edit(project .. '/a.md')
+  review('comment', { 3, 0, 3, 1 }, '좁은 코멘트')
+  review('comment', { 1, 0, 5, 1 }, '넓은 코멘트')
+  child.api.nvim_win_set_cursor(0, { 3, 0 })
+
+  -- When
+  local result = candidates()
+
+  -- Then
+  eq(result, { { kind = 'comment', text = '좁은 코멘트' }, { kind = 'comment', text = '넓은 코멘트' } })
+end
+
+-- 사례 49 (글자 수 비교)
+A['줄 수도 같으면 글자 수가 적은 후보가 앞에 온다'] = function()
+  -- Given: "가나다라마"에서 "나다"를 먼저, 줄 전체를 나중에 달고 커서를 "나" 위에 둔다.
+  write_file(project .. '/a.md', { '가나다라마' })
+  edit(project .. '/a.md')
+  review('comment', { 1, #'가', 1, #'가나다' }, '나다 코멘트')
+  review('comment', { 1, 0, 1, #'가나다라마' }, '줄 코멘트')
+  child.api.nvim_win_set_cursor(0, { 1, #'가' })
+
+  -- When
+  local result = candidates()
+
+  -- Then
+  eq(result, { { kind = 'comment', text = '나다 코멘트' }, { kind = 'comment', text = '줄 코멘트' } })
+end
+
+-- 사례 50
+A['범위가 완전히 같으면 나중에 단 후보가 앞에 온다'] = function()
+  -- Given: 같은 줄 전체에 "먼저"와 "나중" 코멘트를 차례로 단다.
+  write_file(project .. '/a.md', { '하나' })
+  edit(project .. '/a.md')
+  review('comment', { 1, 0, 1, #'하나' }, '먼저')
+  review('comment', { 1, 0, 1, #'하나' }, '나중')
+  child.api.nvim_win_set_cursor(0, { 1, 0 })
+
+  -- When
+  local result = candidates()
+
+  -- Then
+  eq(result, { { kind = 'comment', text = '나중' }, { kind = 'comment', text = '먼저' } })
+end
+
+-- 사례 51, 51-1
+-- 전체 코멘트는 첫 줄 위 가상 줄에 보이므로 첫 줄에서 고를 수 있다.
+-- 단 순서(사례 50)와 구별하려고 전체 코멘트를 나중에 단다.
+A['커서가 첫 줄에 있으면 파일 전체 코멘트(global)도 범위 후보들 뒤에 후보로 들어간다'] = function()
+  -- Given: 1번째 줄 코멘트를 단 뒤 전체 코멘트를 달고, 커서는 1번째 줄에 있다.
+  write_file(project .. '/a.md', { '하나', '둘' })
+  edit(project .. '/a.md')
+  review('comment', { 1, 0, 1, #'하나' }, '첫 줄 코멘트')
+  review('global', '전체 코멘트')
+  child.api.nvim_win_set_cursor(0, { 1, 0 })
+
+  -- When
+  local result = candidates()
+
+  -- Then
+  eq(result, { { kind = 'comment', text = '첫 줄 코멘트' }, { kind = 'global', text = '전체 코멘트' } })
+end
+
+-- 사례 51
+A['커서가 첫 줄이 아니면 파일 전체 코멘트(global)는 후보에 들어가지 않는다'] = function()
+  -- Given: 전체 코멘트와 2번째 줄 코멘트가 있고, 커서는 2번째 줄에 있다.
+  write_file(project .. '/a.md', { '하나', '둘' })
+  edit(project .. '/a.md')
+  review('global', '전체 코멘트')
+  review('comment', { 2, 0, 2, #'둘' }, '둘째 줄 코멘트')
+  child.api.nvim_win_set_cursor(0, { 2, 0 })
+
+  -- When
+  local result = candidates()
+
+  -- Then
+  eq(result, { { kind = 'comment', text = '둘째 줄 코멘트' } })
+end
+
+-- 사례 52
+A['다른 버퍼의 어노테이션은 같은 줄에 있어도 후보에 들어가지 않는다'] = function()
+  -- Given: a.md와 b.md의 1번째 줄에 각각 코멘트가 있고, 커서는 b.md의 1번째 줄에 있다.
+  write_file(project .. '/a.md', { 'a' })
+  write_file(project .. '/b.md', { 'b' })
+  edit(project .. '/a.md')
+  review('comment', { 1, 0, 1, 1 }, 'a 코멘트')
+  edit(project .. '/b.md')
+  review('comment', { 1, 0, 1, 1 }, 'b 코멘트')
+  child.api.nvim_win_set_cursor(0, { 1, 0 })
+
+  -- When
+  local result = candidates()
+
+  -- Then
+  eq(result, { { kind = 'comment', text = 'b 코멘트' } })
+end
+
+-- 사례 64 ---------------------------------------------------------------------
+-- 후보가 여럿일 때 *_at_cursor 함수는 처음 단 후보가 아니라 가장 유력한(정렬된 첫 번째) 후보에 동작한다.
+-- 아래 세 테스트는 같은 상황을 쓴다: "가나 다라마 바" 줄 전체 코멘트를 먼저, "다라마" 코멘트를 나중에 달고
+-- 커서를 "다" 위에 둔다. 가장 유력한 후보는 "다라마" 코멘트다.
+
+local function given_line_and_word_comments()
+  write_file(project .. '/a.md', { '가나 다라마 바' })
+  edit(project .. '/a.md')
+  review('comment', { 1, 0, 1, #'가나 다라마 바' }, '줄 코멘트')
+  review('comment', { 1, #'가나 ', 1, #'가나 다라마' }, '단어 코멘트')
+  child.api.nvim_win_set_cursor(0, { 1, #'가나 ' })
+end
+
+A['후보가 여럿이면 커서 위치의 코멘트(text_at_cursor)는 가장 유력한 후보의 코멘트다'] = function()
+  -- Given
+  given_line_and_word_comments()
+
+  -- When / Then
+  eq(review('text_at_cursor'), '단어 코멘트')
+end
+
+A['후보가 여럿이면 지우기(remove_at_cursor)는 가장 유력한 후보만 지운다'] = function()
+  -- Given
+  given_line_and_word_comments()
+
+  -- When
+  review('remove_at_cursor')
+
+  -- Then: 줄 코멘트만 남는다.
+  eq(
+    review('feedback'),
+    HEADER
+      .. lines({
+        '## a.md',
+        '',
+        "I've reviewed this document and have 1 piece of feedback:",
+        '',
+        '### 1. (line 1) Feedback on: "가나 다라마 바"',
+        '> 줄 코멘트',
+        '',
+        '---',
+        '',
+      })
+  )
+end
+
+A['후보가 여럿이면 고치기(edit_at_cursor)는 가장 유력한 후보의 코멘트만 바꾼다'] = function()
+  -- Given
+  given_line_and_word_comments()
+
+  -- When
+  review('edit_at_cursor', '고친 단어 코멘트')
+
+  -- Then: 줄 코멘트는 그대로이고 "다라마" 코멘트만 바뀐다.
+  eq(
+    review('feedback'),
+    HEADER
+      .. lines({
+        '## a.md',
+        '',
+        "I've reviewed this document and have 2 pieces of feedback:",
+        '',
+        '### 1. (line 1) Feedback on: "가나 다라마 바"',
+        '> 줄 코멘트',
+        '',
+        '### 2. (line 1) Feedback on: "다라마"',
+        '> 고친 단어 코멘트',
         '',
         '---',
         '',

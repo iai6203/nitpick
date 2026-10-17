@@ -7,6 +7,7 @@
 --   :[range]Nitpick delete           범위에 삭제 표시
 --   :Nitpick edit {text}             커서 위치의 어노테이션 코멘트 수정
 --   :Nitpick remove                  커서 위치의 어노테이션 삭제
+--     edit/remove는 커서 위치의 후보가 여럿이면 vim.ui.select로 고르게 한다.
 --   :Nitpick clear                   리뷰 초기화
 --   :Nitpick copy                    피드백을 클립보드에 복사
 --   :Nitpick paste                   답변을 붙여넣을 메시지 버퍼를 연다
@@ -472,6 +473,333 @@ T['메시지 버퍼(:Nitpick paste)'][':Nitpick paste는 nofile 마크다운 버
       '---',
     })
   )
+end
+
+-- 사례 53~62 ------------------------------------------------------------------
+-- 비슷한 위치에 단 어노테이션이 여럿이면 :Nitpick remove / edit이 고르는 창(vim.ui.select)을 띄운다.
+-- 테스트에서는 고르는 창을 가짜로 바꿔, 항목을 format_item으로 보여 준 모양을 _G.selects에 기록하고
+-- _G.next_choice번째 항목을 고른 것처럼 돌려준다(nil이면 취소).
+-- 입력창(vim.ui.input)과 알림(vim.notify)도 가짜로 바꿔 기록한다.
+
+T['겹친 어노테이션 고르기(vim.ui.select)'] = MiniTest.new_set({
+  hooks = {
+    pre_case = function()
+      child.lua([[
+        _G.selects = {}
+        _G.next_choice = nil
+        vim.ui.select = function(items, opts, on_choice)
+          local format_item = opts.format_item or tostring
+          table.insert(_G.selects, vim.tbl_map(format_item, items))
+          local choice = _G.next_choice
+          on_choice(choice and items[choice], choice)
+        end
+        _G.prompts = {}
+        _G.next_input = nil
+        vim.ui.input = function(opts, on_confirm)
+          table.insert(_G.prompts, opts)
+          on_confirm(_G.next_input)
+        end
+        _G.notified = {}
+        vim.notify = function(msg, level) table.insert(_G.notified, { msg = msg, level = level }) end
+      ]])
+    end,
+  },
+})
+local P = T['겹친 어노테이션 고르기(vim.ui.select)']
+
+-- 여러 테스트가 쓰는 상황: "가나 다라마 바" 줄 전체 코멘트("줄 코멘트")를 먼저, "다라마" 코멘트("단어 코멘트")를
+-- 나중에 달고 커서를 "다" 위에 둔다. 정렬 순서는 단어 코멘트 → 줄 코멘트다.
+local function given_line_and_word_comments()
+  write_file(project .. '/a.md', { '가나 다라마 바' })
+  edit(project .. '/a.md')
+  child.lua('require("nitpick.review").comment({ 1, 0, 1, #"가나 다라마 바" }, "줄 코멘트")')
+  child.lua('require("nitpick.review").comment({ 1, #"가나 ", 1, #"가나 다라마" }, "단어 코멘트")')
+  child.api.nvim_win_set_cursor(0, { 1, #'가나 ' })
+end
+
+-- 두 코멘트가 모두 남아 있을 때의 피드백
+local BOTH_COMMENTS = HEADER
+  .. lines({
+    '## a.md',
+    '',
+    "I've reviewed this document and have 2 pieces of feedback:",
+    '',
+    '### 1. (line 1) Feedback on: "가나 다라마 바"',
+    '> 줄 코멘트',
+    '',
+    '### 2. (line 1) Feedback on: "다라마"',
+    '> 단어 코멘트',
+    '',
+    '---',
+    '',
+  })
+
+-- 사례 53 (보강)
+P[':Nitpick remove는 후보가 하나면 고르는 창 없이 바로 지운다'] = function()
+  -- Given: 1번째 줄에만 코멘트가 있고 커서가 그 줄에 있다.
+  write_file(project .. '/a.md', { '하나', '둘' })
+  edit(project .. '/a.md')
+  child.lua('require("nitpick.review").comment({ 1, 0, 1, #"하나" }, "A")')
+  child.api.nvim_win_set_cursor(0, { 1, 0 })
+
+  -- When
+  child.cmd('Nitpick remove')
+
+  -- Then
+  eq(child.lua_get('#_G.selects'), 0)
+  eq(feedback(), vim.NIL)
+end
+
+-- 사례 54
+-- 두 번째 항목을 골랐을 때 줄 코멘트가 지워지면, 항목이 정렬 순서(단어 → 줄)대로 놓였다는 뜻이다.
+P[':Nitpick remove는 후보가 여럿이면 고르는 창을 띄우고 고른 어노테이션만 지운다'] = function()
+  -- Given: 고르는 창에서 두 번째 항목을 고른다.
+  given_line_and_word_comments()
+  child.lua('_G.next_choice = 2')
+
+  -- When
+  child.cmd('Nitpick remove')
+
+  -- Then: 고르는 창이 한 번 떴고, 두 번째 항목인 줄 코멘트만 지워졌다.
+  eq(child.lua_get('#_G.selects'), 1)
+  eq(
+    feedback(),
+    HEADER
+      .. lines({
+        '## a.md',
+        '',
+        "I've reviewed this document and have 1 piece of feedback:",
+        '',
+        '### 1. (line 1) Feedback on: "다라마"',
+        '> 단어 코멘트',
+        '',
+        '---',
+        '',
+      })
+  )
+end
+
+-- 사례 55
+-- 항목 모양은 위치, 종류, 내용이다. 여러 줄인 코멘트는 첫 줄만 보여 준다.
+P['고르는 창의 항목은 위치, 종류, 내용을 보여 준다'] = function()
+  -- Given: 1번째 줄 삭제 표시, 1~2번째 줄의 두 줄짜리 코멘트, 전체 코멘트가 있고 커서는 1번째 줄에 있다.
+  write_file(project .. '/a.md', { '하나', '둘' })
+  edit(project .. '/a.md')
+  child.lua('require("nitpick.review").comment({ 1, 0, 2, #"둘" }, "첫 줄\\n둘째 줄")')
+  child.lua('require("nitpick.review").delete({ 1, 0, 1, #"하나" })')
+  child.lua('require("nitpick.review").global("전체 코멘트")')
+  child.api.nvim_win_set_cursor(0, { 1, 0 })
+
+  -- When: 고르는 창에서 취소한다.
+  child.cmd('Nitpick remove')
+
+  -- Then: 좁은 범위 → 넓은 범위 → 전체 코멘트 순서다.
+  eq(child.lua_get('_G.selects'), { { 'L1 deletion: "하나"', 'L1–2 comment: 첫 줄', '[전체] 전체 코멘트' } })
+end
+
+-- 사례 56
+P['고르는 창에서 취소하면 :Nitpick remove는 아무것도 지우지 않는다'] = function()
+  -- Given: 고르는 창에서 아무것도 고르지 않는다(_G.next_choice = nil).
+  given_line_and_word_comments()
+
+  -- When
+  child.cmd('Nitpick remove')
+
+  -- Then
+  eq(child.lua_get('#_G.selects'), 1)
+  eq(feedback(), BOTH_COMMENTS)
+end
+
+-- 사례 57
+P[':Nitpick remove는 커서 위치에 어노테이션이 없으면 경고를 띄운다'] = function()
+  -- Given: 1번째 줄에 코멘트가 있고 커서는 2번째 줄에 있다.
+  write_file(project .. '/a.md', { '하나', '둘' })
+  edit(project .. '/a.md')
+  child.lua('require("nitpick.review").comment({ 1, 0, 1, #"하나" }, "A")')
+  child.api.nvim_win_set_cursor(0, { 2, 0 })
+
+  -- When
+  child.cmd('Nitpick remove')
+
+  -- Then: 경고가 한 번 떴고 코멘트는 남아 있다.
+  eq(child.lua_get('_G.notified'), { { msg = 'nitpick: 커서 위치에 어노테이션이 없습니다.', level = vim.log.levels.WARN } })
+  eq(child.lua_get('#_G.selects'), 0)
+  eq(
+    feedback(),
+    HEADER
+      .. lines({
+        '## a.md',
+        '',
+        "I've reviewed this document and have 1 piece of feedback:",
+        '',
+        '### 1. (line 1) Feedback on: "하나"',
+        '> A',
+        '',
+        '---',
+        '',
+      })
+  )
+end
+
+-- 사례 57-1
+P['커서가 첫 줄에 있으면 :Nitpick remove로 파일 전체 코멘트를 지울 수 있다'] = function()
+  -- Given: 전체 코멘트만 있고 커서는 1번째 줄에 있다.
+  write_file(project .. '/a.md', { '하나', '둘' })
+  edit(project .. '/a.md')
+  child.lua('require("nitpick.review").global("전체 코멘트")')
+  child.api.nvim_win_set_cursor(0, { 1, 0 })
+
+  -- When
+  child.cmd('Nitpick remove')
+
+  -- Then
+  eq(feedback(), vim.NIL)
+end
+
+-- 사례 58
+P[':Nitpick edit의 후보에는 삭제 표시가 들어가지 않는다'] = function()
+  -- Given: 같은 줄에 삭제 표시를 먼저, 코멘트를 나중에 단다.
+  write_file(project .. '/a.md', { '하나' })
+  edit(project .. '/a.md')
+  child.lua('require("nitpick.review").delete({ 1, 0, 1, #"하나" })')
+  child.lua('require("nitpick.review").comment({ 1, 0, 1, #"하나" }, "처음")')
+  child.api.nvim_win_set_cursor(0, { 1, 0 })
+
+  -- When
+  child.cmd('Nitpick edit 고친 코멘트')
+
+  -- Then: 수정 후보는 코멘트 하나뿐이라 고르는 창 없이 코멘트가 바뀌고, 삭제 표시는 그대로다.
+  eq(child.lua_get('#_G.selects'), 0)
+  eq(
+    feedback(),
+    HEADER
+      .. lines({
+        '## a.md',
+        '',
+        "I've reviewed this document and have 2 pieces of feedback:",
+        '',
+        '### 1. (line 1) Remove this',
+        '```',
+        '하나',
+        '```',
+        "> I don't want this in the document.",
+        '',
+        '### 2. (line 1) Feedback on: "하나"',
+        '> 고친 코멘트',
+        '',
+        '---',
+        '',
+      })
+  )
+end
+
+-- 사례 60
+P[':Nitpick edit은 후보가 여럿이면 먼저 고르고, 고른 코멘트를 기본값으로 입력창을 연 뒤 그 코멘트만 바꾼다'] = function()
+  -- Given: 고르는 창에서 두 번째 항목(줄 코멘트)을 고르고, 입력창에 "고친 줄 코멘트"를 입력한다.
+  given_line_and_word_comments()
+  child.lua('_G.next_choice = 2')
+  child.lua('_G.next_input = "고친 줄 코멘트"')
+
+  -- When
+  child.cmd('Nitpick edit')
+
+  -- Then: 입력창의 기본값(default)이 고른 코멘트였고, 줄 코멘트만 바뀌었다.
+  eq(child.lua_get('#_G.selects'), 1)
+  eq(child.lua_get('_G.prompts[1].default'), '줄 코멘트')
+  eq(
+    feedback(),
+    HEADER
+      .. lines({
+        '## a.md',
+        '',
+        "I've reviewed this document and have 2 pieces of feedback:",
+        '',
+        '### 1. (line 1) Feedback on: "가나 다라마 바"',
+        '> 고친 줄 코멘트',
+        '',
+        '### 2. (line 1) Feedback on: "다라마"',
+        '> 단어 코멘트',
+        '',
+        '---',
+        '',
+      })
+  )
+end
+
+-- 사례 60-1 (버그 재현)
+-- snacks, telescope 같은 고르는 창은 자기 float 창에서 on_choice를 부르고, 입력창은 새 float 창을 열어 포커스를 옮긴다.
+-- 이 사례에서만 두 창을 그렇게 동작하는 가짜로 바꾼다.
+P['후보가 여럿인 :Nitpick edit에서 고른 뒤 입력창이 자기 창을 열면 포커스는 그 입력창에 있다'] = function()
+  -- Given: 고르는 창은 float 창을 연 상태에서 두 번째 항목을 고르고, 입력창은 float 창을 열어 포커스를 옮긴다.
+  given_line_and_word_comments()
+  child.lua([[
+    local function open_float()
+      return vim.api.nvim_open_win(vim.api.nvim_create_buf(false, true), true, {
+        relative = 'editor', row = 1, col = 1, width = 20, height = 1,
+      })
+    end
+    vim.ui.select = function(items, _, on_choice)
+      local picker = open_float()
+      on_choice(items[2], 2)
+      if vim.api.nvim_win_is_valid(picker) then
+        vim.api.nvim_win_close(picker, true)
+      end
+    end
+    vim.ui.input = function()
+      _G.input_win = open_float()
+    end
+  ]])
+
+  -- When
+  child.cmd('Nitpick edit')
+
+  -- Then: 현재 창이 입력창이다.
+  eq(child.api.nvim_get_current_win(), child.lua_get('_G.input_win'))
+end
+
+-- 사례 61 (고르는 창 취소)
+P[':Nitpick edit의 고르는 창에서 취소하면 입력창을 열지 않고 아무것도 바꾸지 않는다'] = function()
+  -- Given: 고르는 창에서 아무것도 고르지 않는다(_G.next_choice = nil).
+  given_line_and_word_comments()
+
+  -- When
+  child.cmd('Nitpick edit')
+
+  -- Then
+  eq(child.lua_get('#_G.selects'), 1)
+  eq(child.lua_get('#_G.prompts'), 0)
+  eq(feedback(), BOTH_COMMENTS)
+end
+
+-- 사례 61 (입력창 취소)
+P[':Nitpick edit에서 고른 뒤 입력창을 취소하면 아무것도 바꾸지 않는다'] = function()
+  -- Given: 고르는 창에서 두 번째 항목을 고르고, 입력창은 취소한다(_G.next_input = nil).
+  given_line_and_word_comments()
+  child.lua('_G.next_choice = 2')
+
+  -- When
+  child.cmd('Nitpick edit')
+
+  -- Then: 고르는 창과 입력창이 한 번씩 떴고, 코멘트는 그대로다.
+  eq(child.lua_get('#_G.selects'), 1)
+  eq(child.lua_get('#_G.prompts'), 1)
+  eq(feedback(), BOTH_COMMENTS)
+end
+
+-- 사례 62 (현재 동작 기록: 기존에 테스트가 없던 경고를 변경 전에 고정한다)
+P[':Nitpick edit은 커서 위치에 코멘트가 없으면 경고를 띄운다'] = function()
+  -- Given: 커서 줄에는 삭제 표시만 있다.
+  write_file(project .. '/a.md', { '하나' })
+  edit(project .. '/a.md')
+  child.lua('require("nitpick.review").delete({ 1, 0, 1, #"하나" })')
+  child.api.nvim_win_set_cursor(0, { 1, 0 })
+
+  -- When
+  child.cmd('Nitpick edit')
+
+  -- Then: 경고가 한 번 떴고 입력창은 열리지 않았다.
+  eq(child.lua_get('_G.notified'), { { msg = 'nitpick: 커서 위치에 코멘트가 없습니다.', level = vim.log.levels.WARN } })
+  eq(child.lua_get('#_G.prompts'), 0)
 end
 
 return T

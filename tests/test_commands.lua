@@ -289,16 +289,16 @@ C['visual 줄 단위 선택에서 :Nitpick delete를 실행하면 선택한 줄 
   )
 end
 
--- 코멘트 내용을 인자로 주지 않으면 입력창(vim.ui.input)으로 받는다.
+-- 코멘트 내용을 인자로 주지 않으면 입력창(nitpick.textarea)으로 받는다.
 -- 테스트에서는 입력창을 가짜로 바꿔, 받은 옵션(opts)을 _G.prompts에 기록하고 _G.next_input을 입력한 것처럼 돌려준다.
 
-T['입력창(vim.ui.input)'] = MiniTest.new_set({
+T['입력창(nitpick.textarea)'] = MiniTest.new_set({
   hooks = {
     pre_case = function()
       child.lua([[
         _G.prompts = {}
         _G.next_input = nil
-        vim.ui.input = function(opts, on_confirm)
+        require('nitpick.textarea').open = function(opts, on_confirm)
           table.insert(_G.prompts, opts)
           on_confirm(_G.next_input)
         end
@@ -306,7 +306,7 @@ T['입력창(vim.ui.input)'] = MiniTest.new_set({
     end,
   },
 })
-local I = T['입력창(vim.ui.input)']
+local I = T['입력창(nitpick.textarea)']
 
 I['내용 없이 :Nitpick global을 실행하면 입력창에 입력한 내용으로 전체 코멘트를 단다'] = function()
   -- Given: 입력창에 "입력한 전체 코멘트"를 입력할 것이다.
@@ -466,7 +466,7 @@ end
 -- 비슷한 위치에 단 어노테이션이 여럿이면 :Nitpick remove / edit이 고르는 창(vim.ui.select)을 띄운다.
 -- 테스트에서는 고르는 창을 가짜로 바꿔, 항목을 format_item으로 보여 준 모양을 _G.selects에 기록하고
 -- _G.next_choice번째 항목을 고른 것처럼 돌려준다(nil이면 취소).
--- 입력창(vim.ui.input)과 알림(vim.notify)도 가짜로 바꿔 기록한다.
+-- 입력창(nitpick.textarea)과 알림(vim.notify)도 가짜로 바꿔 기록한다.
 
 T['겹친 어노테이션 고르기(vim.ui.select)'] = MiniTest.new_set({
   hooks = {
@@ -482,7 +482,7 @@ T['겹친 어노테이션 고르기(vim.ui.select)'] = MiniTest.new_set({
         end
         _G.prompts = {}
         _G.next_input = nil
-        vim.ui.input = function(opts, on_confirm)
+        require('nitpick.textarea').open = function(opts, on_confirm)
           table.insert(_G.prompts, opts)
           on_confirm(_G.next_input)
         end
@@ -725,7 +725,7 @@ P['후보가 여럿인 :Nitpick edit에서 고른 뒤 입력창이 자기 창을
         vim.api.nvim_win_close(picker, true)
       end
     end
-    vim.ui.input = function()
+    require('nitpick.textarea').open = function()
       _G.input_win = open_float()
     end
   ]])
@@ -781,7 +781,7 @@ P[':Nitpick edit은 커서 위치에 코멘트가 없으면 경고를 띄운다'
 end
 
 -- 라벨(:Nitpick label). 라벨은 미리 정해 둔 코멘트이고, 고칠 수 없으며 달고 지우기만 한다.
--- 고르는 창(vim.ui.select), 입력창(vim.ui.input), 알림(vim.notify)은 위 겹친 어노테이션 테스트와 같은 방식으로 가짜로 바꿔 기록한다.
+-- 고르는 창(vim.ui.select), 입력창(nitpick.textarea), 알림(vim.notify)은 위 겹친 어노테이션 테스트와 같은 방식으로 가짜로 바꿔 기록한다.
 
 T['라벨(:Nitpick label)'] = MiniTest.new_set({
   hooks = {
@@ -797,7 +797,7 @@ T['라벨(:Nitpick label)'] = MiniTest.new_set({
         end
         _G.prompts = {}
         _G.next_input = nil
-        vim.ui.input = function(opts, on_confirm)
+        require('nitpick.textarea').open = function(opts, on_confirm)
           table.insert(_G.prompts, opts)
           on_confirm(_G.next_input)
         end

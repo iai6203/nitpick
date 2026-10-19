@@ -39,6 +39,8 @@ return {
       { '<leader>rp', '<Cmd>Nitpick paste<CR>', desc = 'Nitpick paste' },
     },
     opts = {
+      -- 어노테이션 범위의 사인 컬럼 막대 문자. 기본값은 '▎'이고 false면 막대를 그리지 않습니다.
+      sign = '▎',
       -- 라벨 목록. 아래는 기본값이라 labels를 생략해도 그대로 포함됩니다.
       labels = {
         { emoji = '❓', text = 'Clarify this' },
@@ -223,11 +225,18 @@ I've reviewed this document and have 1 piece of feedback:
 
 | 하이라이트 그룹 | 쓰이는 곳 | 기본값 |
 |---|---|---|
-| `NitpickComment` | 코멘트 범위 | `DiagnosticUnderlineInfo`에 연결 |
-| `NitpickDelete` | 삭제 표시 범위 | 취소선 |
+| `NitpickComment` | 코멘트 범위 | `DiagnosticInfo` 글자색을 배경에 20% 섞은 배경색 |
+| `NitpickDelete` | 삭제 표시 범위 | 취소선 + `DiagnosticError` 글자색을 배경에 20% 섞은 배경색 |
 | `NitpickCommentText` | 코멘트 가상 줄 (`  ↳ 내용`) | `Comment`에 연결 |
 | `NitpickLabel` | 라벨 범위 | `NitpickComment`에 연결 |
 | `NitpickLabelText` | 라벨 가상 줄 (`  ↳ [❓ Clarify this]`) | `NitpickCommentText`에 연결 |
+| `NitpickCommentSign` | 코멘트 범위의 사인 컬럼 막대 | `DiagnosticInfo`에 연결 |
+| `NitpickDeleteSign` | 삭제 표시 범위의 사인 컬럼 막대 | `DiagnosticError`에 연결 |
+| `NitpickLabelSign` | 라벨 범위의 사인 컬럼 막대 | `NitpickCommentSign`에 연결 |
+
+범위 배경색은 글자색을 가리지 않도록 배경만 칠하며, `Normal`의 배경색에 섞습니다. 투명 배경처럼 `Normal`에 배경색이 없으면 `background`가 `dark`일 때 검정, `light`일 때 흰색에 섞습니다. 색은 colorscheme을 바꿀 때마다 다시 계산하고, 섞을 진단 글자색이 없으면 코멘트는 `DiagnosticUnderlineInfo`(밑줄)로, 삭제 표시는 취소선만으로 표시합니다.
+
+어노테이션 범위의 모든 줄 사인 컬럼에 막대(`▎`)가 보입니다. 문자는 `opts.sign`으로 바꾸고 `sign = false`로 끌 수 있습니다.
 
 코멘트 본문은 범위의 끝 줄 아래에, 파일 전체 코멘트는 첫 줄 위에 `  ↳ [전체] 내용`으로 보입니다. 하이라이트 그룹은 `default`로 정의하므로 직접 정한 색이 우선합니다.
 

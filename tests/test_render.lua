@@ -238,14 +238,123 @@ end
 
 T['하이라이트 그룹'] = MiniTest.new_set()
 
-T['하이라이트 그룹']['사용자가 정의하지 않았으면 기본 하이라이트로 연결된다'] = function()
+-- 하이라이트 그룹(name)의 정의. 링크를 따라가지 않는다.
+local function hl(name)
+  return child.lua('return vim.api.nvim_get_hl(0, { name = ... })', { name })
+end
+
+-- 하이라이트 그룹들을 정의한다: { 그룹 이름 = nvim_set_hl의 값, ... }
+local function set_hl(groups)
+  child.lua(
+    [[
+    for name, value in pairs(...) do
+      vim.api.nvim_set_hl(0, name, value)
+    end
+  ]],
+    { groups }
+  )
+end
+
+T['하이라이트 그룹']['사용자가 정의하지 않았으면 코멘트 가상 줄 하이라이트는 Comment로 연결된다'] = function()
   -- When: 리뷰(nitpick.review)를 불러온다.
   child.lua('require("nitpick.review")')
 
   -- Then
-  eq(child.lua_get('vim.api.nvim_get_hl(0, { name = "NitpickComment" }).link'), 'DiagnosticUnderlineInfo')
-  eq(child.lua_get('vim.api.nvim_get_hl(0, { name = "NitpickCommentText" }).link'), 'Comment')
-  eq(child.lua_get('vim.api.nvim_get_hl(0, { name = "NitpickDelete" }).strikethrough'), true)
+  eq(hl('NitpickCommentText').link, 'Comment')
+end
+
+-- 범위 하이라이트의 기본 배경색은 진단 글자색을 Normal 배경에 20% 섞은 색이다.
+-- 섞기는 RGB 채널마다 배경 × 0.8 + 글자색 × 0.2로 계산한다.
+-- 예: 배경 #000000에 글자색 #ffffff를 섞으면 0xff × 0.2 = 0x33 → #333333
+
+T['하이라이트 그룹']['코멘트 범위(NitpickComment)의 기본 배경색은 DiagnosticInfo 글자색을 Normal 배경에 20% 섞은 색이다'] = function()
+  -- Given: Normal 배경은 검정, DiagnosticInfo 글자색은 흰색이다.
+  set_hl({ Normal = { bg = '#000000' }, DiagnosticInfo = { fg = '#ffffff' } })
+
+  -- When: 리뷰(nitpick.review)를 불러온다.
+  child.lua('require("nitpick.review")')
+
+  -- Then
+  eq(hl('NitpickComment').bg, 0x333333)
+end
+
+T['하이라이트 그룹']['코멘트 범위(NitpickComment)의 기본값에는 글자색이 없어 문법 하이라이트의 글자색을 가리지 않는다'] = function()
+  -- Given
+  set_hl({ Normal = { bg = '#000000' }, DiagnosticInfo = { fg = '#ffffff' } })
+
+  -- When
+  child.lua('require("nitpick.review")')
+
+  -- Then: 글자색(fg)도 다른 그룹으로의 연결(link)도 없다.
+  local group = hl('NitpickComment')
+  eq(group.fg, nil)
+  eq(group.link, nil)
+end
+
+T['하이라이트 그룹']['삭제 표시(NitpickDelete)의 기본값은 취소선에 DiagnosticError 글자색을 20% 섞은 배경색이다'] = function()
+  -- Given: Normal 배경은 검정, DiagnosticError 글자색은 흰색이다.
+  set_hl({ Normal = { bg = '#000000' }, DiagnosticError = { fg = '#ffffff' } })
+
+  -- When
+  child.lua('require("nitpick.review")')
+
+  -- Then
+  local group = hl('NitpickDelete')
+  eq(group.strikethrough, true)
+  eq(group.bg, 0x333333)
+end
+
+-- 투명 배경 colorscheme처럼 Normal에 배경색이 없으면 'background' 옵션으로 바탕색을 정한다.
+-- dark → #000000, light → #ffffff
+
+T['하이라이트 그룹']['Normal에 배경색이 없고 background=light면 흰 바탕에 섞는다'] = function()
+  -- Given: Normal에 배경색이 없고, 밝은 배경이며, DiagnosticInfo 글자색은 검정이다.
+  -- background를 바꾸면 기본 colorscheme이 다시 적용되므로 색은 그 뒤에 정한다.
+  child.o.background = 'light'
+  set_hl({ Normal = {}, DiagnosticInfo = { fg = '#000000' } })
+
+  -- When
+  child.lua('require("nitpick.review")')
+
+  -- Then: 0xff × 0.8 = 0xcc → #cccccc
+  eq(hl('NitpickComment').bg, 0xcccccc)
+end
+
+T['하이라이트 그룹']['Normal에 배경색이 없고 background=dark면 검은 바탕에 섞는다'] = function()
+  -- Given: Normal에 배경색이 없고, 어두운 배경이며, DiagnosticInfo 글자색은 흰색이다.
+  -- background를 바꾸면 기본 colorscheme이 다시 적용되므로 색은 그 뒤에 정한다.
+  child.o.background = 'dark'
+  set_hl({ Normal = {}, DiagnosticInfo = { fg = '#ffffff' } })
+
+  -- When
+  child.lua('require("nitpick.review")')
+
+  -- Then
+  eq(hl('NitpickComment').bg, 0x333333)
+end
+
+T['하이라이트 그룹']['DiagnosticInfo에 글자색이 없으면 코멘트 범위는 예전처럼 DiagnosticUnderlineInfo로 연결된다'] = function()
+  -- Given: 섞을 글자색이 없다.
+  set_hl({ Normal = { bg = '#000000' }, DiagnosticInfo = {} })
+
+  -- When
+  child.lua('require("nitpick.review")')
+
+  -- Then
+  eq(hl('NitpickComment').link, 'DiagnosticUnderlineInfo')
+end
+
+T['하이라이트 그룹']['DiagnosticError에 글자색이 없으면 삭제 표시는 예전처럼 취소선만 쓴다'] = function()
+  -- Given: 섞을 글자색이 없다.
+  set_hl({ Normal = { bg = '#000000' }, DiagnosticError = {} })
+
+  -- When
+  child.lua('require("nitpick.review")')
+
+  -- Then
+  local group = hl('NitpickDelete')
+  eq(group.strikethrough, true)
+  eq(group.bg, nil)
 end
 
 T['하이라이트 그룹']['사용자가 먼저 정의한 하이라이트는 덮어쓰지 않는다'] = function()
@@ -261,15 +370,19 @@ T['하이라이트 그룹']['사용자가 먼저 정의한 하이라이트는 �
   eq(child.lua_get('vim.api.nvim_get_hl(0, { name = "NitpickComment" })'), { fg = 0xff0000 })
 end
 
-T['하이라이트 그룹']['colorscheme을 바꿔 하이라이트가 지워져도 기본 하이라이트가 다시 정의된다'] = function()
-  -- Given: 리뷰(nitpick.review)를 불러왔다.
+T['하이라이트 그룹']['colorscheme을 바꾸면 새 Normal 배경과 DiagnosticInfo 글자색으로 배경색을 다시 계산한다'] = function()
+  -- Given: 흰 바탕에 흰 글자색이라 섞은 배경색이 #ffffff인 상태로 리뷰(nitpick.review)를 불러왔다.
+  set_hl({ Normal = { bg = '#ffffff' }, DiagnosticInfo = { fg = '#ffffff' } })
   child.lua('require("nitpick.review")')
+  eq(hl('NitpickComment').bg, 0xffffff)
 
-  -- When: colorscheme을 다시 불러온다(:hi clear 후 ColorScheme 이벤트).
-  child.cmd('colorscheme default')
+  -- When: colorscheme이 하듯 하이라이트를 지우고(:hi clear) 새 색을 정한 뒤 ColorScheme 이벤트를 보낸다.
+  child.cmd('hi clear')
+  set_hl({ Normal = { bg = '#000000' }, DiagnosticInfo = { fg = '#ffffff' } })
+  child.cmd('doautocmd ColorScheme')
 
   -- Then
-  eq(child.lua_get('vim.api.nvim_get_hl(0, { name = "NitpickComment" }).link'), 'DiagnosticUnderlineInfo')
+  eq(hl('NitpickComment').bg, 0x333333)
 end
 
 -- 라벨은 코멘트와 따로 색을 바꿀 수 있도록 자기 하이라이트 그룹을 쓴다.
@@ -324,6 +437,145 @@ T['하이라이트 그룹']['colorscheme을 바꿔도 라벨 하이라이트가 
   -- Then
   eq(child.lua_get('vim.api.nvim_get_hl(0, { name = "NitpickLabel" }).link'), 'NitpickComment')
   eq(child.lua_get('vim.api.nvim_get_hl(0, { name = "NitpickLabelText" }).link'), 'NitpickCommentText')
+end
+
+-- 사인 컬럼 막대: 어노테이션 범위의 모든 줄 사인 컬럼에 막대 문자를 표시한다.
+-- 설정(setup의 sign)으로 문자를 바꾸거나 끌 수 있고, 기본은 '▎'다.
+
+-- 현재 버퍼의 사인 목록을 줄 순서로: { { row, 문자, 하이라이트 그룹 }, ... }
+-- Neovim이 사인 문자 뒤를 공백으로 채워 두 칸으로 만들기 때문에 양 끝 공백을 지워서 비교한다.
+local function signs()
+  return child.lua([[
+    local found = {}
+    for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(0, -1, 0, -1, { details = true })) do
+      local details = mark[4]
+      if details.sign_text then
+        table.insert(found, { mark[2], vim.trim(details.sign_text), details.sign_hl_group })
+      end
+    end
+    table.sort(found, function(a, b)
+      return a[1] < b[1]
+    end)
+    return found
+  ]])
+end
+
+local function setup(opts)
+  child.lua('require("nitpick").setup(...)', { opts })
+end
+
+T['사인 컬럼 막대'] = MiniTest.new_set()
+local G = T['사인 컬럼 막대']
+
+G['설정하지 않았으면 코멘트 범위의 모든 줄에 막대(▎)가 NitpickCommentSign으로 보인다'] = function()
+  -- Given
+  write_file(project .. '/a.md', { '하나', '둘', '셋', '넷' })
+  edit(project .. '/a.md')
+
+  -- When: 2~3번째 줄에 코멘트를 단다.
+  review('comment', { 2, 0, 3, #'셋' }, '코멘트')
+
+  -- Then: 0부터 센 줄 1, 2에만 막대가 있다.
+  eq(signs(), {
+    { 1, '▎', 'NitpickCommentSign' },
+    { 2, '▎', 'NitpickCommentSign' },
+  })
+end
+
+G['라벨 범위에는 NitpickLabelSign, 삭제 표시 범위에는 NitpickDeleteSign으로 막대가 보인다'] = function()
+  -- Given
+  write_file(project .. '/a.md', { '하나', '둘' })
+  edit(project .. '/a.md')
+
+  -- When: 1번째 줄에 라벨을, 2번째 줄에 삭제 표시를 단다.
+  review('label', { 1, 0, 1, #'하나' }, CLARIFY)
+  review('delete', { 2, 0, 2, #'둘' })
+
+  -- Then
+  eq(signs(), {
+    { 0, '▎', 'NitpickLabelSign' },
+    { 1, '▎', 'NitpickDeleteSign' },
+  })
+end
+
+G['파일 전체 코멘트(global)에는 막대가 없다'] = function()
+  -- Given
+  write_file(project .. '/a.md', { '하나' })
+  edit(project .. '/a.md')
+
+  -- When
+  review('global', '전체 코멘트')
+
+  -- Then
+  eq(signs(), {})
+end
+
+G['어노테이션을 지우면(remove_at_cursor) 막대도 사라진다'] = function()
+  -- Given: 1번째 줄에 코멘트가 있고 커서가 그 줄에 있다.
+  write_file(project .. '/a.md', { '하나', '둘' })
+  edit(project .. '/a.md')
+  review('comment', { 1, 0, 1, #'하나' }, '코멘트')
+  child.api.nvim_win_set_cursor(0, { 1, 0 })
+
+  -- When
+  review('remove_at_cursor')
+
+  -- Then
+  eq(signs(), {})
+end
+
+G['버퍼를 닫았다가(bdelete) 다시 열면 막대도 복원된다'] = function()
+  -- Given: a.md의 2번째 줄에 코멘트가 있고, 다른 파일 b.md도 열려 있다.
+  write_file(project .. '/a.md', { '하나', '둘', '셋' })
+  write_file(project .. '/b.md', { 'b' })
+  edit(project .. '/a.md')
+  review('comment', { 2, 0, 2, #'둘' }, '코멘트')
+  edit(project .. '/b.md')
+
+  -- When
+  child.cmd('bdelete ' .. vim.fn.fnameescape(project .. '/a.md'))
+  edit(project .. '/a.md')
+
+  -- Then
+  eq(signs(), { { 1, '▎', 'NitpickCommentSign' } })
+end
+
+G['setup의 sign에 문자를 주면 그 문자로 막대를 그린다'] = function()
+  -- Given: 막대 문자(sign)를 '|'로 설정했다.
+  setup({ sign = '|' })
+  write_file(project .. '/a.md', { '하나' })
+  edit(project .. '/a.md')
+
+  -- When
+  review('comment', { 1, 0, 1, #'하나' }, '코멘트')
+
+  -- Then
+  eq(signs(), { { 0, '|', 'NitpickCommentSign' } })
+end
+
+G['setup의 sign이 false면 막대 없이 범위 하이라이트와 가상 줄만 보인다'] = function()
+  -- Given: 막대(sign)를 껐다.
+  setup({ sign = false })
+  write_file(project .. '/a.md', { '하나' })
+  edit(project .. '/a.md')
+
+  -- When
+  review('comment', { 1, 0, 1, #'하나' }, '코멘트')
+
+  -- Then
+  eq(signs(), {})
+  eq(highlights('NitpickComment'), { { 0, 0, 0, #'하나' } })
+  eq(virt_lines(), { { 0, false, { { '  ↳ 코멘트', 'NitpickCommentText' } } } })
+end
+
+T['하이라이트 그룹']['사용자가 정의하지 않았으면 막대 하이라이트는 종류별 진단 색으로 연결된다'] = function()
+  -- When: 리뷰(nitpick.review)를 불러온다.
+  child.lua('require("nitpick.review")')
+
+  -- Then: 코멘트는 DiagnosticInfo, 삭제 표시는 DiagnosticError, 라벨은 코멘트 막대를 따른다.
+  eq(hl('NitpickCommentSign').link, 'DiagnosticInfo')
+  eq(hl('NitpickDeleteSign').link, 'DiagnosticError')
+  eq(hl('NitpickLabelSign').link, 'NitpickCommentSign')
 end
 
 return T

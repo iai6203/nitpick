@@ -25,15 +25,15 @@ local function command_range(args)
   return { line1, 0, line2, #vim.fn.getline(line2) }
 end
 
--- 코멘트 내용을 인자에서 읽고, 없으면 입력창(vim.ui.input)으로 받는다.
--- 입력창은 비동기일 수 있으므로 버퍼를 먼저 잡아 두고 그 버퍼에서 on_text를 실행한다.
+-- 코멘트 내용을 인자에서 읽고, 없으면 여러 줄 입력창(nitpick.textarea)으로 받는다.
+-- 입력창은 비동기이므로 버퍼를 먼저 잡아 두고 그 버퍼에서 on_text를 실행한다.
 local function with_text(text, input_opts, on_text)
   if text ~= '' then
     on_text(text)
     return
   end
   local bufnr = vim.api.nvim_get_current_buf()
-  vim.ui.input(input_opts, function(input)
+  require('nitpick.textarea').open(input_opts, function(input)
     if input == nil or input == '' or not vim.api.nvim_buf_is_valid(bufnr) then
       return
     end

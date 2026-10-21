@@ -35,6 +35,9 @@ return {
       { '<leader>rg', '<Cmd>Nitpick global<CR>', desc = 'Nitpick global comment' },
       { '<leader>re', '<Cmd>Nitpick edit<CR>', desc = 'Nitpick edit' },
       { '<leader>rx', '<Cmd>Nitpick remove<CR>', desc = 'Nitpick remove' },
+      { '<leader>rq', '<Cmd>Nitpick list<CR>', desc = 'Nitpick list' },
+      { ']r', '<Cmd>Nitpick next<CR>', desc = 'Nitpick next' },
+      { '[r', '<Cmd>Nitpick prev<CR>', desc = 'Nitpick prev' },
       { '<leader>ry', '<Cmd>Nitpick copy<CR>', desc = 'Nitpick copy' },
       { '<leader>rp', '<Cmd>Nitpick paste<CR>', desc = 'Nitpick paste' },
     },
@@ -120,6 +123,8 @@ lazy.nvim은 시작할 때 runtimepath를 초기화하므로 `--cmd`가 아니�
 | `:Nitpick edit [내용]` | 커서 위치의 코멘트를 고칩니다. 입력창에 기존 내용이 채워져 있습니다 |
 | `:Nitpick remove` | 커서 위치의 어노테이션을 지웁니다 |
 | `:Nitpick clear` | 리뷰 전체를 지웁니다 |
+| `:Nitpick list` | 모든 파일의 어노테이션을 quickfix 목록에 넣고 엽니다 |
+| `:Nitpick next` / `:Nitpick prev` | 현재 버퍼의 다음·이전 어노테이션으로 커서를 옮깁니다 |
 | `:Nitpick copy` | 피드백을 클립보드(`+`)에 복사합니다 |
 | `:Nitpick paste` | 답변을 붙여넣고 리뷰할 메시지 버퍼를 새 탭에 엽니다 |
 
@@ -131,6 +136,11 @@ lazy.nvim은 시작할 때 runtimepath를 초기화하므로 `--cmd`가 아니�
 | `<Esc>`, `q` (normal) / 다른 창으로 옮기기 | 취소 |
 
 `edit`과 `remove`는 커서 위치에 어노테이션이 여럿이면 `vim.ui.select`로 고르게 합니다. 가장 그럴듯한 것이 맨 위에 옵니다. 파일 전체 코멘트는 커서를 첫 줄에 두고 고치거나 지웁니다.
+
+### 목록과 이동
+
+- `:Nitpick list`는 리뷰 중인 모든 파일과 메시지 버퍼의 어노테이션을 quickfix 목록에 넣습니다. 순서는 복사되는 피드백과 같습니다. 항목은 `comment: 내용`, `deletion: "원문"`, `label: ❓ Clarify this` 모양이고, 파일 전체 코멘트는 1번 줄의 `[전체] 내용`으로 들어갑니다. 버퍼를 닫은 파일도 들어갑니다.
+- `:Nitpick next` / `:Nitpick prev`는 현재 버퍼에서 어노테이션의 시작 위치로 커서를 옮기고, 끝에 닿으면 반대쪽 끝으로 돌아갑니다. 파일 전체 코멘트는 범위가 없어 들르지 않으니 목록에서 찾으세요. `<C-o>`로 이동 전 위치로 돌아갈 수 있습니다.
 
 ### 라벨
 

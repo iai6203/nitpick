@@ -69,6 +69,18 @@ local function open_message_buffer()
   review.mark_message_buffer(bufnr)
 end
 
+-- 현재 버퍼에서 다음(forward) 또는 이전 어노테이션의 시작 위치로 커서를 옮긴다.
+local function jump(forward)
+  local start = review.next_start(forward)
+  if not start then
+    vim.notify('nitpick: 현재 버퍼에 이동할 어노테이션이 없습니다.', vim.log.levels.WARN)
+    return
+  end
+  -- <C-o>로 돌아올 수 있게 점프 목록에 남긴다.
+  vim.cmd("normal! m'")
+  vim.api.nvim_win_set_cursor(0, start)
+end
+
 local subcommands = {
   comment = function(args, text)
     local range = command_range(args)
@@ -137,6 +149,21 @@ local subcommands = {
   end,
   paste = function()
     open_message_buffer()
+  end,
+  list = function()
+    local items = review.quickfix_items()
+    if #items == 0 then
+      vim.notify('nitpick: 리뷰 내용이 없습니다.', vim.log.levels.INFO)
+      return
+    end
+    vim.fn.setqflist({}, ' ', { title = 'Nitpick', items = items })
+    vim.cmd('copen')
+  end,
+  next = function()
+    jump(true)
+  end,
+  prev = function()
+    jump(false)
   end,
 }
 

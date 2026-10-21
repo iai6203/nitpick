@@ -236,19 +236,27 @@ function M.comments_at_cursor()
   return vim.tbl_filter(function(ann) return ann.text ~= nil and ann.kind ~= 'label' end, M.annotations_at_cursor())
 end
 
---- 고르는 창에 보여 줄 어노테이션 설명. 예: `L3 comment: 내용`, `L1–5 deletion: "원문"`, `[전체] 내용`
----@return string
-function M.describe(ann)
+-- 어노테이션의 종류와 내용. 여러 줄이면 첫 줄만 쓴다. 예: `comment: 내용`, `deletion: "원문"`, `[전체] 내용`
+local function summarize(ann)
   local function first_line(text)
     return vim.split(text, '\n', { plain = true })[1]
   end
   if ann.kind == 'global' then
     return '[전체] ' .. first_line(ann.text)
   end
+  local content = ann.kind == 'deletion' and ('"%s"'):format(first_line(ann.original_text)) or first_line(ann.text)
+  return ('%s: %s'):format(ann.kind, content)
+end
+
+--- 고르는 창에 보여 줄 어노테이션 설명. 예: `L3 comment: 내용`, `L1–5 deletion: "원문"`, `[전체] 내용`
+---@return string
+function M.describe(ann)
+  if ann.kind == 'global' then
+    return summarize(ann)
+  end
   local start_line, _, end_line = position(ann)
   local where = start_line == end_line and ('L%d'):format(start_line) or ('L%d–%d'):format(start_line, end_line)
-  local content = ann.kind == 'deletion' and ('"%s"'):format(first_line(ann.original_text)) or first_line(ann.text)
-  return ('%s %s: %s'):format(where, ann.kind, content)
+  return where .. ' ' .. summarize(ann)
 end
 
 function M.comment(range, text)
@@ -367,6 +375,77 @@ function M.summary()
     end
   end
   return summary
+end
+
+--- 모든 어노테이션의 quickfix 항목(setqflist). 문서는 처음 어노테이션을 단 순서로, 문서 안에서는
+--- 피드백과 같은 순서(파일 전체 코멘트 먼저, 나머지는 위치 순서)로 나온다.
+--- 파일은 버퍼가 지워져도 찾을 수 있게 경로로, 이름 없는 메시지 버퍼는 버퍼 번호로 가리킨다.
+---@return table[]
+function M.quickfix_items()
+  local items = {}
+  for _, doc in ipairs(documents) do
+    if doc.path or exported_message(doc) then
+      local entries = {}
+      for _, ann in ipairs(doc.annotations) do
+        local entry = { kind = ann.kind, ann = ann }
+        if ann.mark_id or ann.saved_range then
+          entry.start_line, entry.start_col = position(ann)
+        end
+        table.insert(entries, entry)
+      end
+      for _, entry in ipairs(export.sort_in_document_order(entries)) do
+        table.insert(items, {
+          filename = doc.path,
+          bufnr = doc.message_buf,
+          lnum = entry.start_line or 1,
+          -- quickfix의 열은 1부터 센다. 파일 전체 코멘트는 열이 없다(0).
+          col = entry.start_col and entry.start_col + 1 or 0,
+          text = summarize(entry.ann),
+        })
+      end
+    end
+  end
+  return items
+end
+
+--- 현재 버퍼에서 커서 다음(forward) 또는 이전 어노테이션의 시작 위치 { 1부터 센 줄, 0부터 센 열 }.
+--- 끝에 닿으면 반대쪽 끝으로 돌아간다. 시작 위치가 같은 어노테이션은 하나로 친다.
+--- 범위가 있는 어노테이션이 없으면 nil. 파일 전체 코멘트는 범위가 없으므로 들르지 않는다.
+---@param forward boolean
+---@return integer[]?
+function M.next_start(forward)
+  local bufnr = vim.api.nvim_get_current_buf()
+  local starts = {}
+  for _, doc in ipairs(documents) do
+    for _, ann in ipairs(doc.annotations) do
+      if ann.bufnr == bufnr and ann.mark_id then
+        local start_row, start_col = mark_range(ann)
+        table.insert(starts, { start_row + 1, start_col })
+      end
+    end
+  end
+  if #starts == 0 then
+    return nil
+  end
+  local function before(a, b)
+    return a[1] < b[1] or (a[1] == b[1] and a[2] < b[2])
+  end
+  table.sort(starts, before)
+  local cursor = vim.api.nvim_win_get_cursor(0)
+  if forward then
+    for _, start in ipairs(starts) do
+      if before(cursor, start) then
+        return start
+      end
+    end
+    return starts[1]
+  end
+  for i = #starts, 1, -1 do
+    if before(starts[i], cursor) then
+      return starts[i]
+    end
+  end
+  return starts[#starts]
 end
 
 --- 리뷰 피드백 텍스트. 어노테이션이 하나도 없으면 nil.

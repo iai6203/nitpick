@@ -6,9 +6,11 @@ local BUNDLE_TITLE = 'File Feedback'
 local BUNDLE_INTRO =
   'The following feedback is on the files under review, one section per file, in the order they were given for review.'
 
--- 원본처럼 파일 전체 코멘트를 앞에 두고, 나머지는 문서 위치 순서로 정렬한다.
--- 같은 위치끼리는 입력 순서를 유지한다(table.sort는 안정 정렬이 아니므로 순번으로 비교).
-local function sort_in_document_order(annotations)
+--- 원본처럼 파일 전체 코멘트를 앞에 두고, 나머지는 문서 위치 순서로 정렬한 새 목록을 돌려준다.
+--- 같은 위치끼리는 입력 순서를 유지한다(table.sort는 안정 정렬이 아니므로 순번으로 비교).
+---@param annotations { kind: string, start_line: integer?, start_col: integer? }[]
+---@return table[]
+function M.sort_in_document_order(annotations)
   local indexed = {}
   for i, ann in ipairs(annotations) do
     indexed[i] = { ann = ann, index = i }
@@ -117,7 +119,7 @@ function M.file_feedback(documents)
     if #doc.annotations > 0 then
       out = out .. '## ' .. doc.path .. '\n\n'
       out = out .. "I've reviewed this document and have " .. pieces(#doc.annotations) .. ' of feedback:\n\n'
-      local sorted = sort_in_document_order(doc.annotations)
+      local sorted = M.sort_in_document_order(doc.annotations)
       for number, ann in ipairs(sorted) do
         out = out .. render_entry(ann, number, 'document', 3)
       end
@@ -159,7 +161,7 @@ function M.message_feedback(message)
   out = out .. fenced_block(excerpt_message_text(message.text), 'markdown') .. '\n'
   out = out .. '# Feedback for Message 1\n\n'
   out = out .. "I've reviewed this message and have " .. pieces(#message.annotations) .. ' of feedback:\n\n'
-  local sorted = sort_in_document_order(message.annotations)
+  local sorted = M.sort_in_document_order(message.annotations)
   for number, ann in ipairs(sorted) do
     out = out .. render_entry(ann, number, 'message', 2)
   end

@@ -1117,4 +1117,271 @@ B['라벨과 코멘트가 겹치면 :Nitpick remove의 고르는 창에 라벨�
   )
 end
 
+-- 어노테이션 목록(:Nitpick list) ------------------------------------------------------
+-- 여러 파일에 단 어노테이션을 quickfix 목록에 모아 한눈에 보고 바로 옮겨 갈 수 있게 한다.
+-- 항목 내용은 "<종류>: <내용>"이다. quickfix가 줄 번호를 보여 주므로 고르는 창처럼 "L3"를 붙이지 않는다.
+--   comment: <코멘트 첫 줄>, deletion: "<원문 첫 줄>", label: <라벨>, 파일 전체 코멘트: [전체] <코멘트 첫 줄>
+
+T['어노테이션 목록(:Nitpick list)'] = MiniTest.new_set({
+  hooks = {
+    pre_case = function()
+      child.lua([[
+        _G.notified = {}
+        vim.notify = function(msg, level) table.insert(_G.notified, { msg = msg, level = level }) end
+      ]])
+    end,
+  },
+})
+local Q = T['어노테이션 목록(:Nitpick list)']
+
+-- quickfix 목록(getqflist)을 읽기 쉬운 모양으로 바꾼다. 버퍼는 파일 이름으로 보여 준다(이름 없는 버퍼는 '').
+local function quickfix_items()
+  return child.lua([[
+    return vim.tbl_map(function(item)
+      return { file = vim.fn.fnamemodify(vim.fn.bufname(item.bufnr), ':t'), lnum = item.lnum, col = item.col, text = item.text }
+    end, vim.fn.getqflist())
+  ]])
+end
+
+-- 현재 탭에 quickfix 창이 열려 있는지
+local function quickfix_window_open()
+  return child.lua_get('vim.fn.getqflist({ winid = 0 }).winid ~= 0')
+end
+
+Q[':Nitpick list는 모든 파일의 어노테이션을 위치, 종류, 내용과 함께 quickfix 목록에 넣고 quickfix 창을 연다'] = function()
+  -- Given: a.md에 여러 줄 코멘트와 삭제 표시, b.md에 라벨이 있다. 지금 보고 있는 파일은 b.md다.
+  write_file(project .. '/a.md', { '하나', '둘 셋' })
+  write_file(project .. '/b.md', { '넷' })
+  edit(project .. '/a.md')
+  child.lua('require("nitpick.review").comment({ 1, 0, 1, #"하나" }, "첫 줄\\n둘째 줄")')
+  child.lua('require("nitpick.review").delete({ 2, #"둘 ", 2, #"둘 셋" })')
+  edit(project .. '/b.md')
+  child.cmd('1Nitpick label clarify-this')
+
+  -- When
+  child.cmd('Nitpick list')
+
+  -- Then: 열(col)은 1부터 센 바이트 위치이고, 여러 줄 코멘트는 첫 줄만 보인다.
+  eq(quickfix_items(), {
+    { file = 'a.md', lnum = 1, col = 1, text = 'comment: 첫 줄' },
+    { file = 'a.md', lnum = 2, col = #'둘 ' + 1, text = 'deletion: "셋"' },
+    { file = 'b.md', lnum = 1, col = 1, text = 'label: ❓ Clarify this' },
+  })
+  eq(quickfix_window_open(), true)
+end
+
+-- 복사되는 피드백과 같은 순서다.
+Q['목록은 처음 어노테이션을 단 파일 순서로, 파일 안에서는 위치 순서로 나온다'] = function()
+  -- Given: b.md에 먼저 어노테이션을 달고, 그다음 a.md에 3번째 줄 → 1번째 줄 순서로 달았다.
+  write_file(project .. '/a.md', { '하나', '둘', '셋' })
+  write_file(project .. '/b.md', { '넷' })
+  edit(project .. '/b.md')
+  child.lua('require("nitpick.review").comment({ 1, 0, 1, #"넷" }, "B")')
+  edit(project .. '/a.md')
+  child.lua('require("nitpick.review").comment({ 3, 0, 3, #"셋" }, "A3")')
+  child.lua('require("nitpick.review").comment({ 1, 0, 1, #"하나" }, "A1")')
+
+  -- When
+  child.cmd('Nitpick list')
+
+  -- Then
+  eq(quickfix_items(), {
+    { file = 'b.md', lnum = 1, col = 1, text = 'comment: B' },
+    { file = 'a.md', lnum = 1, col = 1, text = 'comment: A1' },
+    { file = 'a.md', lnum = 3, col = 1, text = 'comment: A3' },
+  })
+end
+
+-- 파일 전체 코멘트는 범위가 없어서 커서로 찾기 어려우므로 목록에서 접근할 수 있게 한다. 열은 없다(col = 0).
+Q['파일 전체 코멘트는 그 파일의 1번 줄 항목으로 맨 앞에 들어가고 [전체]로 표시된다'] = function()
+  -- Given: 2번째 줄 코멘트를 먼저, 파일 전체 코멘트를 나중에 달았다.
+  write_file(project .. '/a.md', { '하나', '둘' })
+  edit(project .. '/a.md')
+  child.lua('require("nitpick.review").comment({ 2, 0, 2, #"둘" }, "줄 코멘트")')
+  child.lua('require("nitpick.review").global("전체 첫 줄\\n전체 둘째 줄")')
+
+  -- When
+  child.cmd('Nitpick list')
+
+  -- Then
+  eq(quickfix_items(), {
+    { file = 'a.md', lnum = 1, col = 0, text = '[전체] 전체 첫 줄' },
+    { file = 'a.md', lnum = 2, col = 1, text = 'comment: 줄 코멘트' },
+  })
+end
+
+Q['버퍼를 닫은 파일의 어노테이션도 닫기 직전 위치로 목록에 들어간다'] = function()
+  -- Given: b.md 2번째 줄에 코멘트를 달고, 맨 위에 줄을 하나 넣어 3번째 줄로 옮긴 뒤 버퍼를 닫았다.
+  write_file(project .. '/a.md', { '하나' })
+  write_file(project .. '/b.md', { '넷', '다섯' })
+  edit(project .. '/b.md')
+  child.lua('require("nitpick.review").comment({ 2, 0, 2, #"다섯" }, "B")')
+  child.api.nvim_buf_set_lines(0, 0, 0, false, { '새 줄' })
+  child.cmd('write')
+  edit(project .. '/a.md')
+  child.cmd('bdelete ' .. vim.fn.fnameescape(project .. '/b.md'))
+
+  -- When
+  child.cmd('Nitpick list')
+
+  -- Then
+  eq(quickfix_items(), { { file = 'b.md', lnum = 3, col = 1, text = 'comment: B' } })
+end
+
+Q[':Nitpick paste 메시지 버퍼의 어노테이션도 그 버퍼의 항목으로 목록에 들어간다'] = function()
+  -- Given: 메시지 버퍼 2번째 줄에 코멘트를 달았다.
+  child.cmd('Nitpick paste')
+  local message_buf = child.api.nvim_get_current_buf()
+  child.api.nvim_buf_set_lines(0, 0, -1, false, { '# 계획', '첫 단계' })
+  child.cmd('2Nitpick comment 더 구체적으로')
+
+  -- When
+  child.cmd('Nitpick list')
+
+  -- Then: 이름 없는 메시지 버퍼(message_buf)를 가리키는 항목 하나가 들어 있다.
+  eq(quickfix_items(), { { file = '', lnum = 2, col = 1, text = 'comment: 더 구체적으로' } })
+  eq(child.lua_get('vim.fn.getqflist()[1].bufnr'), message_buf)
+end
+
+-- :Nitpick copy의 빈 리뷰 알림과 같은 문구를 쓴다.
+Q['어노테이션이 없으면 quickfix 목록을 바꾸지 않고 리뷰 내용이 없다고 알린다'] = function()
+  -- Given: quickfix 목록에 이전 항목이 있고, 어노테이션은 없다.
+  child.fn.setqflist({ { filename = 'other.txt', lnum = 7, text = '이전 항목' } })
+
+  -- When
+  child.cmd('Nitpick list')
+
+  -- Then
+  eq(child.lua_get('vim.fn.getqflist()[1].text'), '이전 항목')
+  eq(child.lua_get('#vim.fn.getqflist()'), 1)
+  eq(quickfix_window_open(), false)
+  eq(child.lua_get('_G.notified'), { { msg = 'nitpick: 리뷰 내용이 없습니다.', level = vim.log.levels.INFO } })
+end
+
+Q['하위 명령 자동 완성에 list, next, prev가 들어간다'] = function()
+  -- When / Then
+  eq(child.fn.getcompletion('Nitpick li', 'cmdline'), { 'list' })
+  eq(child.fn.getcompletion('Nitpick ne', 'cmdline'), { 'next' })
+  eq(child.fn.getcompletion('Nitpick pr', 'cmdline'), { 'prev' })
+end
+
+-- 어노테이션 이동(:Nitpick next / prev) ------------------------------------------------
+-- 현재 버퍼에서 범위가 있는 어노테이션의 시작 위치로 커서를 옮긴다. 끝에 닿으면 반대쪽 끝으로 돌아간다.
+-- 커서 위치는 nvim_win_get_cursor 모양({ 1부터 센 줄, 0부터 센 바이트 열 })으로 검증한다.
+
+T['어노테이션 이동(:Nitpick next / prev)'] = MiniTest.new_set({
+  hooks = {
+    pre_case = function()
+      child.lua([[
+        _G.notified = {}
+        vim.notify = function(msg, level) table.insert(_G.notified, { msg = msg, level = level }) end
+      ]])
+    end,
+  },
+})
+local N = T['어노테이션 이동(:Nitpick next / prev)']
+
+-- 여러 테스트가 쓰는 상황: a.md의 2번째 줄 처음, 4번째 줄 "다라"(3바이트 뒤), 6번째 줄 처음에 코멘트가 있다.
+local function given_three_comments()
+  write_file(project .. '/a.md', { '하나', '둘', '셋', '가 다라', '다섯', '여섯', '일곱' })
+  edit(project .. '/a.md')
+  child.lua('require("nitpick.review").comment({ 2, 0, 2, #"둘" }, "A")')
+  child.lua('require("nitpick.review").comment({ 4, #"가 ", 4, #"가 다라" }, "B")')
+  child.lua('require("nitpick.review").comment({ 6, 0, 6, #"여섯" }, "C")')
+end
+
+N[':Nitpick next는 커서보다 뒤에서 시작하는 첫 어노테이션의 시작 위치로 커서를 옮긴다'] = function()
+  -- Given: 커서가 3번째 줄에 있다.
+  given_three_comments()
+  child.api.nvim_win_set_cursor(0, { 3, 0 })
+
+  -- When
+  child.cmd('Nitpick next')
+
+  -- Then: 4번째 줄 "다라"의 시작으로 옮겨 갔다.
+  eq(child.api.nvim_win_get_cursor(0), { 4, #'가 ' })
+end
+
+N[':Nitpick prev는 커서보다 앞에서 시작하는 마지막 어노테이션의 시작 위치로 커서를 옮긴다'] = function()
+  -- Given: 커서가 6번째 줄 코멘트의 시작에 있다.
+  given_three_comments()
+  child.api.nvim_win_set_cursor(0, { 6, 0 })
+
+  -- When
+  child.cmd('Nitpick prev')
+
+  -- Then
+  eq(child.api.nvim_win_get_cursor(0), { 4, #'가 ' })
+end
+
+N['마지막 어노테이션 뒤에서 :Nitpick next를 하면 첫 어노테이션으로, 첫 어노테이션 앞에서 :Nitpick prev를 하면 마지막으로 돌아간다'] = function()
+  -- Given
+  given_three_comments()
+
+  -- When / Then: 마지막(6번째 줄) 위에서 next → 첫(2번째 줄)
+  child.api.nvim_win_set_cursor(0, { 6, 0 })
+  child.cmd('Nitpick next')
+  eq(child.api.nvim_win_get_cursor(0), { 2, 0 })
+
+  -- When / Then: 첫 어노테이션보다 앞(1번째 줄)에서 prev → 마지막(6번째 줄)
+  child.api.nvim_win_set_cursor(0, { 1, 0 })
+  child.cmd('Nitpick prev')
+  eq(child.api.nvim_win_get_cursor(0), { 6, 0 })
+end
+
+-- 같은 자리에서 멈춘 것처럼 보이지 않도록 시작 위치가 같은 어노테이션은 한 번만 들른다.
+N['시작 위치가 같은 어노테이션 여럿은 한 번에 지나간다'] = function()
+  -- Given: 4번째 줄 "다라"에서 시작하는 코멘트와 삭제 표시가 함께 있고, 커서는 그 위치에 있다.
+  given_three_comments()
+  child.lua('require("nitpick.review").delete({ 4, #"가 ", 4, #"가 다" })')
+  child.api.nvim_win_set_cursor(0, { 4, #'가 ' })
+
+  -- When
+  child.cmd('Nitpick next')
+
+  -- Then: 같은 자리에 머물지 않고 6번째 줄로 갔다.
+  eq(child.api.nvim_win_get_cursor(0), { 6, 0 })
+end
+
+-- 파일 전체 코멘트는 범위가 없으므로 들르지 않는다. 목록(:Nitpick list)에서 접근한다.
+N['파일 전체 코멘트는 이동 대상이 아니다'] = function()
+  -- Given: 파일 전체 코멘트와 3번째 줄 코멘트가 있고, 커서는 5번째 줄에 있다.
+  write_file(project .. '/a.md', { '하나', '둘', '셋', '넷', '다섯' })
+  edit(project .. '/a.md')
+  child.lua('require("nitpick.review").global("전체")')
+  child.lua('require("nitpick.review").comment({ 3, 0, 3, #"셋" }, "A")')
+  child.api.nvim_win_set_cursor(0, { 5, 0 })
+
+  -- When: 뒤에 어노테이션이 없으므로 처음으로 돌아간다.
+  child.cmd('Nitpick next')
+
+  -- Then: 1번째 줄(파일 전체 코멘트)이 아니라 3번째 줄로 갔다.
+  eq(child.api.nvim_win_get_cursor(0), { 3, 0 })
+end
+
+-- 경고 문구는 정해지지 않았으므로 경고 수준(vim.log.levels.WARN)의 알림 하나가 떴는지만 확인한다.
+N['현재 버퍼에 범위가 있는 어노테이션이 없으면 커서를 그대로 두고 경고를 띄운다'] = function()
+  for _, cmd in ipairs({ 'Nitpick next', 'Nitpick prev' }) do
+    -- Given: b.md에는 코멘트가 있지만, 지금 보는 a.md에는 파일 전체 코멘트만 있다.
+    child.cmd('Nitpick clear')
+    child.lua('_G.notified = {}')
+    write_file(project .. '/a.md', { '하나', '둘' })
+    write_file(project .. '/b.md', { '셋' })
+    edit(project .. '/b.md')
+    child.lua('require("nitpick.review").comment({ 1, 0, 1, #"셋" }, "B")')
+    edit(project .. '/a.md')
+    child.lua('require("nitpick.review").global("전체")')
+    child.api.nvim_win_set_cursor(0, { 2, 0 })
+
+    -- When
+    child.cmd(cmd)
+
+    -- Then
+    eq(child.api.nvim_win_get_cursor(0), { 2, 0 })
+    eq(child.api.nvim_buf_get_name(0), project .. '/a.md')
+    eq(child.lua_get('#_G.notified'), 1)
+    eq(child.lua_get('_G.notified[1].level'), vim.log.levels.WARN)
+  end
+end
+
 return T

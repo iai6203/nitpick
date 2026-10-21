@@ -216,6 +216,7 @@ I've reviewed this document and have 1 piece of feedback:
 ````
 
 - 형식은 Plannotator(`backnotprop/plannotator@87dcec4`)의 `exportLinkedDocAnnotations`(파일 묶음)와 `exportMessageAnnotations`(메시지)를 따르며, 테스트에서 바이트 단위로 비교합니다.
+- 단, 여러 줄 코멘트·tip은 원본과 달리 **모든 줄**에 `> `를 붙입니다(빈 줄은 `>`). 원본은 첫 줄에만 붙여서 둘째 줄부터 인용 밖으로 나갑니다.
 - 줄 번호는 Plannotator의 문단 단위가 아니라 **실제로 선택한 줄 범위**입니다.
 - 경로는 Neovim의 현재 디렉터리 기준 상대 경로이고, 그 밖에 있는 파일이면 절대 경로입니다.
 - 파일은 처음 어노테이션을 단 순서대로 나옵니다.

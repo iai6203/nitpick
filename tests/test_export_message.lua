@@ -161,6 +161,41 @@ S['메시지 본문에 ``` 펜스가 있으면 발췌문을 더 긴 ```` 펜스�
   )
 end
 
+-- 파일 리뷰(tests/test_export.lua)와 마찬가지로 원본과 달리 모든 줄에 인용 표시를 붙인다.
+S['코멘트(text)가 여러 줄이면 모든 줄 앞에 인용 표시(> )를 붙인다'] = function()
+  -- Given: 붙여넣은 답변 1번째 줄에 두 줄짜리 코멘트를 달았다.
+  local message = {
+    text = '# 계획',
+    annotations = {
+      { kind = 'comment', start_line = 1, end_line = 1, original_text = '계획', text = '첫 줄\n둘째 줄' },
+    },
+  }
+
+  -- When
+  local output = message_feedback(message)
+
+  -- Then
+  eq(
+    output,
+    HEADER
+      .. lines({
+        '```markdown',
+        '# 계획',
+        '```',
+        '',
+        '# Feedback for Message 1',
+        '',
+        "I've reviewed this message and have 1 piece of feedback:",
+        '',
+        '## 1. (line 1) Feedback on: "계획"',
+        '> 첫 줄',
+        '> 둘째 줄',
+        '',
+        '---',
+      })
+  )
+end
+
 -- 메시지 형식에서는 라벨 요약(Label Summary)이 구분선(---) 뒤에 "##" 제목으로 붙고,
 -- 원본이 끝 공백을 지우므로(trimEnd) 요약 목록의 마지막 줄로 끝난다.
 S['라벨이 있으면 구분선(---) 뒤에 ## Label Summary를 붙이고 끝 공백 없이 끝난다'] = function()

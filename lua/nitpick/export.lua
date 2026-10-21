@@ -46,6 +46,16 @@ local function line_label(ann)
   return ('lines %d–%d'):format(ann.start_line, ann.end_line)
 end
 
+-- 본문을 인용(>)으로 감싼다. 원본은 앞에 '> '를 한 번만 붙여 둘째 줄부터 인용 밖으로 나가므로,
+-- 여기서만 원본과 다르게 모든 줄에 붙인다. 빈 줄은 끝 공백 없이 '>'로 쓴다.
+local function quote(text)
+  local lines = {}
+  for _, line in ipairs(vim.split(text, '\n', { plain = true })) do
+    table.insert(lines, line == '' and '>' or '> ' .. line)
+  end
+  return table.concat(lines, '\n') .. '\n'
+end
+
 local function render_entry(ann, number, subject, level)
   local out = ('%s %d. '):format(('#'):rep(level), number)
   local label = line_label(ann)
@@ -58,16 +68,16 @@ local function render_entry(ann, number, subject, level)
     out = out .. "> I don't want this in the " .. subject .. '.\n'
   elseif ann.kind == 'comment' then
     out = out .. 'Feedback on: "' .. ann.original_text .. '"\n'
-    out = out .. '> ' .. ann.text .. '\n'
+    out = out .. quote(ann.text)
   elseif ann.kind == 'label' then
     -- 원본의 isQuickLabel 코멘트: 코멘트 인용 대신 tip이 있으면 tip을 인용한다.
     out = out .. '[' .. ann.text .. '] Feedback on: "' .. ann.original_text .. '"\n'
     if ann.tip then
-      out = out .. '> ' .. ann.tip .. '\n'
+      out = out .. quote(ann.tip)
     end
   elseif ann.kind == 'global' then
     out = out .. 'General feedback about the ' .. subject .. '\n'
-    out = out .. '> ' .. ann.text .. '\n'
+    out = out .. quote(ann.text)
   end
   return out .. '\n'
 end

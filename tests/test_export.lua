@@ -420,7 +420,11 @@ S['여러 파일이어도 구분선(---)과 줄바꿈은 전체 출력 끝에 �
   eq(separator_count, 1)
 end
 
-S['코멘트가 여러 줄이면 원본처럼 첫 줄에만 인용 표시(> )를 붙인다'] = function()
+-- 여러 줄 인용 ------------------------------------------------------------------
+-- 원본은 본문 앞에 "> "를 한 번만 붙여서 둘째 줄부터 인용 밖으로 나간다.
+-- 받는 쪽이 둘째 줄을 코멘트가 아닌 본문으로 읽지 않도록 여기서만 원본과 다르게 모든 줄에 붙인다.
+
+S['코멘트(text)가 여러 줄이면 모든 줄 앞에 인용 표시(> )를 붙인다'] = function()
   -- Given: 코멘트 본문(text)에 줄바꿈이 있다.
   local documents = {
     {
@@ -434,7 +438,7 @@ S['코멘트가 여러 줄이면 원본처럼 첫 줄에만 인용 표시(> )를
   -- When
   local output = file_feedback(documents)
 
-  -- Then: 둘째 줄 앞에는 "> "가 없다.
+  -- Then: 둘째 줄 앞에도 "> "가 있다.
   eq(
     output,
     HEADER
@@ -445,7 +449,118 @@ S['코멘트가 여러 줄이면 원본처럼 첫 줄에만 인용 표시(> )를
         '',
         '### 1. (line 1) Feedback on: "제목"',
         '> 첫 줄',
-        '둘째 줄',
+        '> 둘째 줄',
+        '',
+        '---',
+        '',
+      })
+  )
+end
+
+S['파일 전체 코멘트(text)가 여러 줄이면 모든 줄 앞에 인용 표시(> )를 붙인다'] = function()
+  -- Given: 파일 전체 코멘트 본문(text)이 세 줄이다.
+  local documents = {
+    {
+      path = 'README.md',
+      annotations = { { kind = 'global', text = '첫 줄\n둘째 줄\n셋째 줄' } },
+    },
+  }
+
+  -- When
+  local output = file_feedback(documents)
+
+  -- Then
+  eq(
+    output,
+    HEADER
+      .. lines({
+        '## README.md',
+        '',
+        "I've reviewed this document and have 1 piece of feedback:",
+        '',
+        '### 1. General feedback about the document',
+        '> 첫 줄',
+        '> 둘째 줄',
+        '> 셋째 줄',
+        '',
+        '---',
+        '',
+      })
+  )
+end
+
+S['라벨 지시문(tip)이 여러 줄이면 모든 줄 앞에 인용 표시(> )를 붙인다'] = function()
+  -- Given: 사용자가 설정한 라벨의 지시문(tip)이 두 줄이다.
+  local documents = {
+    {
+      path = 'README.md',
+      annotations = {
+        {
+          kind = 'label',
+          start_line = 3,
+          end_line = 3,
+          original_text = '설치 방법',
+          text = '🐢 Check performance',
+          tip = 'Measure before and after.\nReport the numbers.',
+        },
+      },
+    },
+  }
+
+  -- When
+  local output = file_feedback(documents)
+
+  -- Then
+  eq(
+    output,
+    HEADER
+      .. lines({
+        '## README.md',
+        '',
+        "I've reviewed this document and have 1 piece of feedback:",
+        '',
+        '### 1. (line 3) [🐢 Check performance] Feedback on: "설치 방법"',
+        '> Measure before and after.',
+        '> Report the numbers.',
+        '',
+        '### Label Summary',
+        '',
+        '- **🐢 Check performance**: 1',
+        '',
+        '---',
+        '',
+      })
+  )
+end
+
+-- 빈 줄을 그대로 두면 인용이 거기서 끊기고, "> "로 쓰면 끝 공백이 남는다.
+S['코멘트(text) 중간의 빈 줄은 끝 공백 없이 >로 쓴다'] = function()
+  -- Given: 코멘트 본문(text)의 두 문단 사이에 빈 줄이 있다.
+  local documents = {
+    {
+      path = 'README.md',
+      annotations = {
+        { kind = 'comment', start_line = 1, end_line = 1, original_text = '제목', text = '첫 문단\n\n둘째 문단' },
+      },
+    },
+  }
+
+  -- When
+  local output = file_feedback(documents)
+
+  -- Then: 빈 줄 자리는 정확히 ">"이다.
+  eq(
+    output,
+    HEADER
+      .. lines({
+        '## README.md',
+        '',
+        "I've reviewed this document and have 1 piece of feedback:",
+        '',
+        '### 1. (line 1) Feedback on: "제목"',
+        '> 첫 문단',
+        '>',
+        '> 둘째 문단',
         '',
         '---',
         '',

@@ -348,6 +348,27 @@ local function export_annotations(doc)
   return annotations
 end
 
+-- 피드백에 들어갈 메시지 문서인지. 메시지 버퍼를 지웠으면(wipe) 본문을 읽을 수 없어 빠진다.
+local function exported_message(doc)
+  return doc.message_buf ~= nil and #doc.annotations > 0 and vim.api.nvim_buf_is_valid(doc.message_buf)
+end
+
+--- 피드백에 들어갈 파일 수, 메시지 수, 어노테이션 수.
+---@return { files: integer, messages: integer, annotations: integer }
+function M.summary()
+  local summary = { files = 0, messages = 0, annotations = 0 }
+  for _, doc in ipairs(documents) do
+    if doc.path and #doc.annotations > 0 then
+      summary.files = summary.files + 1
+      summary.annotations = summary.annotations + #doc.annotations
+    elseif exported_message(doc) then
+      summary.messages = summary.messages + 1
+      summary.annotations = summary.annotations + #doc.annotations
+    end
+  end
+  return summary
+end
+
 --- 리뷰 피드백 텍스트. 어노테이션이 하나도 없으면 nil.
 --- 파일은 파일 리뷰 형식, :Nitpick paste 버퍼는 메시지 리뷰 형식으로 직렬화한다.
 ---@return string?
@@ -359,7 +380,7 @@ function M.feedback()
       file_total = file_total + #annotations
       -- cwd 안이면 상대 경로, 밖이면 절대 경로가 된다.
       table.insert(files, { path = vim.fn.fnamemodify(doc.path, ':.'), annotations = annotations })
-    elseif #annotations > 0 and vim.api.nvim_buf_is_valid(doc.message_buf) then
+    elseif exported_message(doc) then
       local text = table.concat(vim.api.nvim_buf_get_lines(doc.message_buf, 0, -1, false), '\n')
       table.insert(parts, export.message_feedback({ text = text, annotations = annotations }))
     end

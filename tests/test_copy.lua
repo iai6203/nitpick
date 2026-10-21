@@ -181,4 +181,74 @@ S['어노테이션이 0개면 복사하지 않고 리뷰 내용이 없다고 알
   eq(child.lua_get('_G.notified[1].msg:find("리뷰 내용이 없습니다", 1, true) ~= nil'), true)
 end
 
+-- 성공 알림의 개수 ------------------------------------------------------------------
+-- 무엇이 복사됐는지 바로 알 수 있도록 알림에 파일 수, 메시지 수, 피드백(어노테이션) 수를 적는다.
+-- 0개인 종류(예: 메시지를 리뷰하지 않았으면 메시지)는 빠진다.
+
+-- 기록된 알림 중 정보 수준(vim.log.levels.INFO)인 것의 문구 목록.
+local function info_messages()
+  return child.lua([[
+    local list = {}
+    for _, n in ipairs(_G.notified) do
+      if n.level == vim.log.levels.INFO then table.insert(list, n.msg) end
+    end
+    return list
+  ]])
+end
+
+S['클립보드에 복사하면 성공 알림에 파일 수와 피드백 수를 적는다'] = function()
+  -- Given: a.md에 어노테이션 2개, b.md에 1개가 있다.
+  start_child()
+  install_fake_clipboard()
+  write_file(project .. '/a.md', { '하나', '둘' })
+  write_file(project .. '/b.md', { '셋' })
+  edit(project .. '/a.md')
+  review('comment', { 1, 0, 1, #'하나' }, '코멘트')
+  review('delete', { 2, 0, 2, #'둘' })
+  edit(project .. '/b.md')
+  review('global', '전체 코멘트')
+
+  -- When
+  copy()
+
+  -- Then
+  eq(info_messages(), { 'nitpick: 파일 2개, 피드백 3개를 클립보드에 복사했습니다.' })
+end
+
+S['메시지 버퍼만 리뷰했으면 성공 알림에 파일 없이 메시지 수와 피드백 수를 적는다'] = function()
+  -- Given: :Nitpick paste로 연 것과 같은 메시지 버퍼(mark_message_buffer)에 코멘트 2개가 있고, 파일 리뷰는 없다.
+  start_child()
+  install_fake_clipboard()
+  child.lua([[
+    local bufnr = vim.api.nvim_create_buf(true, true)
+    vim.api.nvim_set_current_buf(bufnr)
+    require('nitpick.review').mark_message_buffer(bufnr)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { '첫 단계', '둘째 단계' })
+  ]])
+  review('comment', { 1, 0, 1, #'첫 단계' }, '코멘트 1')
+  review('comment', { 2, 0, 2, #'둘째 단계' }, '코멘트 2')
+
+  -- When
+  copy()
+
+  -- Then
+  eq(info_messages(), { 'nitpick: 메시지 1개, 피드백 2개를 클립보드에 복사했습니다.' })
+end
+
+-- unnamed 레지스터로 대신 넣을 때의 문구는 정해지지 않았으므로 개수 부분만 확인한다.
+S['클립보드 provider가 없어 unnamed 레지스터에 넣을 때도 파일 수와 피드백 수를 알린다'] = function()
+  -- Given: 클립보드 provider를 끈 Neovim에서 a.md에 코멘트 하나를 달았다.
+  start_child({ '--cmd', 'let g:loaded_clipboard_provider = 1' })
+  write_file(project .. '/a.md', { '하나' })
+  edit(project .. '/a.md')
+  review('comment', { 1, 0, 1, #'하나' }, '코멘트')
+
+  -- When
+  copy()
+
+  -- Then: 경고 알림 하나에 "파일 1개, 피드백 1개"가 들어 있다.
+  eq(warn_count(), 1)
+  eq(child.lua_get([[_G.notified[1].msg:find('파일 1개, 피드백 1개', 1, true) ~= nil]]), true)
+end
+
 return T

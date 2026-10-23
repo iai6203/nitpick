@@ -2,13 +2,14 @@
 --
 -- 공개 인터페이스 (제안):
 --   require('nitpick').setup(opts)   키맵을 만들지 않는다. 명령은 setup 없이도 plugin/nitpick.lua가 만든다.
---   :Nitpick global {text}           현재 파일 전체에 코멘트
+--   :Nitpick global {text}           현재 파일 전체에 코멘트. 이미 있으면 그 코멘트를 고친다
 --   :[range]Nitpick comment {text}   범위에 코멘트. visual에서 실행하면 선택한 글자 범위를 쓴다
 --   :[range]Nitpick delete           범위에 삭제 표시
 --   :[range]Nitpick label [id]       범위에 라벨. id가 없으면 vim.ui.select로 라벨을 고른다
 --   :Nitpick edit {text}             커서 위치의 어노테이션 코멘트 수정
 --   :Nitpick remove                  커서 위치의 어노테이션 삭제
 --     edit/remove는 커서 위치의 후보가 여럿이면 vim.ui.select로 고르게 한다.
+--     커서 위치에 후보가 없으면 현재 파일의 전체 코멘트(파일마다 하나)를 대상으로 한다.
 --   :Nitpick clear                   리뷰 초기화
 --   :Nitpick copy                    피드백을 클립보드에 복사
 --   :Nitpick paste                   답변을 붙여넣을 메시지 버퍼를 연다
@@ -336,6 +337,35 @@ I['내용 없이 :Nitpick global을 실행하면 입력창에 입력한 내용�
   )
 end
 
+I['전체 코멘트가 있는 파일에서 내용 없이 :Nitpick global을 실행하면 기존 내용을 기본값으로 입력창을 열고 그 코멘트를 고친다'] = function()
+  -- Given: 전체 코멘트가 있고, 입력창에 "고친 전체 코멘트"를 입력할 것이다.
+  write_file(project .. '/a.md', { '하나' })
+  edit(project .. '/a.md')
+  child.lua('require("nitpick.review").global("처음 전체 코멘트")')
+  child.lua('_G.next_input = "고친 전체 코멘트"')
+
+  -- When
+  child.cmd('Nitpick global')
+
+  -- Then: 새 전체 코멘트가 늘지 않고 기존 코멘트가 바뀐다.
+  eq(child.lua_get('_G.prompts[1].default'), '처음 전체 코멘트')
+  eq(
+    feedback(),
+    HEADER
+      .. lines({
+        '## a.md',
+        '',
+        "I've reviewed this document and have 1 piece of feedback:",
+        '',
+        '### 1. General feedback about the document',
+        '> 고친 전체 코멘트',
+        '',
+        '---',
+        '',
+      })
+  )
+end
+
 I['내용 없이 범위를 주고 :Nitpick comment를 실행하면 입력창에 입력한 내용으로 그 범위에 코멘트를 단다'] = function()
   -- Given
   write_file(project .. '/a.md', { '하나', '둘' })
@@ -636,6 +666,53 @@ P['커서가 첫 줄에 있으면 :Nitpick remove로 파일 전체 코멘트를 
 
   -- Then
   eq(feedback(), vim.NIL)
+end
+
+P['커서 위치에 어노테이션이 없으면 :Nitpick remove는 첫 줄이 아니어도 파일 전체 코멘트를 지운다'] = function()
+  -- Given: 전체 코멘트만 있고 커서는 2번째 줄에 있다.
+  write_file(project .. '/a.md', { '하나', '둘' })
+  edit(project .. '/a.md')
+  child.lua('require("nitpick.review").global("전체 코멘트")')
+  child.api.nvim_win_set_cursor(0, { 2, 0 })
+
+  -- When
+  child.cmd('Nitpick remove')
+
+  -- Then: 고르는 창도 경고도 없이 지워진다.
+  eq(child.lua_get('#_G.selects'), 0)
+  eq(child.lua_get('_G.notified'), {})
+  eq(feedback(), vim.NIL)
+end
+
+P['커서 위치에 코멘트가 없으면 :Nitpick edit은 기존 내용을 기본값으로 파일 전체 코멘트를 고친다'] = function()
+  -- Given: 전체 코멘트만 있고 커서는 2번째 줄에 있으며, 입력창에 "고친 전체 코멘트"를 입력할 것이다.
+  write_file(project .. '/a.md', { '하나', '둘' })
+  edit(project .. '/a.md')
+  child.lua('require("nitpick.review").global("전체 코멘트")')
+  child.api.nvim_win_set_cursor(0, { 2, 0 })
+  child.lua('_G.next_input = "고친 전체 코멘트"')
+
+  -- When
+  child.cmd('Nitpick edit')
+
+  -- Then
+  eq(child.lua_get('#_G.selects'), 0)
+  eq(child.lua_get('_G.prompts[1].default'), '전체 코멘트')
+  eq(
+    feedback(),
+    HEADER
+      .. lines({
+        '## a.md',
+        '',
+        "I've reviewed this document and have 1 piece of feedback:",
+        '',
+        '### 1. General feedback about the document',
+        '> 고친 전체 코멘트',
+        '',
+        '---',
+        '',
+      })
+  )
 end
 
 P[':Nitpick edit의 후보에는 삭제 표시가 들어가지 않는다'] = function()

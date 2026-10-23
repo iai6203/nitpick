@@ -183,10 +183,28 @@ local function contains(start_row, start_col, end_row, end_col, row, col)
   return after_start and (before_end or (empty and row == start_row and col == start_col))
 end
 
---- 커서 위치의 후보 어노테이션. 가장 유력한 후보가 먼저 온다.
---- 커서 줄을 범위에 포함하는 어노테이션이 후보이고, 커서가 첫 줄에 있으면 파일 전체 코멘트도 맨 뒤에 들어간다.
---- 순서: 커서 열까지 범위 안에 드는 것 → 줄 수가 적은 것 → 글자 수가 적은 것 → 나중에 단 것
-function M.annotations_at_cursor()
+-- 현재 버퍼 파일의 전체 코멘트. 파일마다 하나다. 없으면 nil.
+local function current_global()
+  local bufnr = vim.api.nvim_get_current_buf()
+  for _, doc in ipairs(documents) do
+    for _, ann in ipairs(doc.annotations) do
+      if ann.bufnr == bufnr and ann.kind == 'global' then
+        return ann
+      end
+    end
+  end
+  return nil
+end
+
+-- 후보가 없으면 전체 코멘트로 넘어간다. 전체 코멘트를 고치거나 지우려고 첫 줄까지 올라가지 않아도 된다.
+local function or_global(candidates)
+  local global = #candidates == 0 and current_global()
+  return global and { global } or candidates
+end
+
+-- 커서 줄을 범위에 포함하는 어노테이션이 후보이고, 커서가 첫 줄에 있으면 파일 전체 코멘트도 맨 뒤에 들어간다.
+-- 순서: 커서 열까지 범위 안에 드는 것 → 줄 수가 적은 것 → 글자 수가 적은 것 → 나중에 단 것
+local function cursor_candidates()
   local bufnr = vim.api.nvim_get_current_buf()
   local cursor = vim.api.nvim_win_get_cursor(0)
   local line, row, col = cursor[1], cursor[1] - 1, cursor[2]
@@ -231,9 +249,16 @@ function M.annotations_at_cursor()
   return vim.tbl_map(function(item) return item.ann end, found)
 end
 
+--- 커서 위치의 후보 어노테이션. 가장 유력한 후보가 먼저 온다.
+--- 커서 줄에 후보가 없으면 현재 파일의 전체 코멘트가 후보가 된다.
+function M.annotations_at_cursor()
+  return or_global(cursor_candidates())
+end
+
 --- 커서 위치에서 코멘트를 고칠 수 있는 후보. 삭제 표시는 코멘트가 없고 라벨은 고칠 수 없으므로 빠진다.
+--- 고칠 수 있는 후보가 없으면 현재 파일의 전체 코멘트가 후보가 된다.
 function M.comments_at_cursor()
-  return vim.tbl_filter(function(ann) return ann.text ~= nil and ann.kind ~= 'label' end, M.annotations_at_cursor())
+  return or_global(vim.tbl_filter(function(ann) return ann.text ~= nil and ann.kind ~= 'label' end, cursor_candidates()))
 end
 
 -- 어노테이션의 종류와 내용. 여러 줄이면 첫 줄만 쓴다. 예: `comment: 내용`, `deletion: "원문"`, `[전체] 내용`
@@ -273,8 +298,20 @@ function M.label(range, label)
   return add({ kind = 'label', text = require('nitpick.labels').display(label), tip = label.tip }, range)
 end
 
+--- 현재 파일 전체에 코멘트를 단다. 전체 코멘트는 파일마다 하나라서 이미 있으면 내용을 바꾼다.
 function M.global(text)
+  local global = current_global()
+  if global then
+    return M.edit(global, text)
+  end
   return add({ kind = 'global', text = text }, nil)
+end
+
+--- 현재 파일의 전체 코멘트 내용. 없으면 nil.
+---@return string?
+function M.global_text()
+  local global = current_global()
+  return global and global.text
 end
 
 --- 어노테이션(annotations_at_cursor가 돌려준 것)을 지운다.

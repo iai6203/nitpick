@@ -119,7 +119,8 @@ local subcommands = {
     end)
   end,
   global = function(_, text)
-    with_text(text, { prompt = 'Nitpick global comment: ' }, review.global)
+    -- 전체 코멘트는 파일마다 하나라서, 이미 있으면 그 내용을 채워 고치게 한다.
+    with_text(text, { prompt = 'Nitpick global comment: ', default = review.global_text() }, review.global)
   end,
   edit = function(_, text)
     local candidates = review.comments_at_cursor()

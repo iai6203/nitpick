@@ -5,7 +5,8 @@
 -- 공개 인터페이스 (제안):
 --   comment(range, text)  현재 버퍼의 범위(range)에 코멘트를 단다. 성공하면 true
 --   delete(range)         현재 버퍼의 범위(range)에 삭제 표시를 한다. 성공하면 true
---   global(text)          현재 버퍼의 파일 전체에 코멘트를 단다. 성공하면 true
+--   global(text)          현재 버퍼의 파일 전체에 코멘트를 단다. 파일마다 하나라서 이미 있으면 내용을 바꾼다. 성공하면 true
+--   global_text()         현재 버퍼 파일의 전체 코멘트 내용. 없으면 nil
 --   label(range, label)   현재 버퍼의 범위(range)에 라벨을 단다(제안). label = { id, emoji, text, tip? }. 성공하면 true
 --   remove_at_cursor()    커서 위치의 어노테이션을 지운다
 --   edit_at_cursor(text)  커서 위치의 어노테이션 코멘트를 바꾼다
@@ -262,6 +263,47 @@ S['경로는 cwd 안이면 cwd 기준 상대 경로로, cwd 밖이면 절대 경
   )
 end
 
+S['파일 전체 코멘트(global)는 파일마다 하나이고, 다시 달면 기존 내용을 바꾼다'] = function()
+  -- Given: a.md에 전체 코멘트를 단다.
+  write_file(project .. '/a.md', { '하나' })
+  edit(project .. '/a.md')
+  review('global', '처음 전체 코멘트')
+
+  -- When: 같은 파일에 전체 코멘트를 다시 단다.
+  local ok = review('global', '고친 전체 코멘트')
+
+  -- Then: 전체 코멘트는 하나뿐이고 나중 내용으로 바뀌었다.
+  eq(ok, true)
+  eq(
+    review('feedback'),
+    HEADER
+      .. lines({
+        '## a.md',
+        '',
+        "I've reviewed this document and have 1 piece of feedback:",
+        '',
+        '### 1. General feedback about the document',
+        '> 고친 전체 코멘트',
+        '',
+        '---',
+        '',
+      })
+  )
+end
+
+S['global_text()는 현재 파일의 전체 코멘트 내용을, 없으면 nil을 돌려준다'] = function()
+  -- Given: a.md에만 전체 코멘트가 있다.
+  write_file(project .. '/a.md', { 'a' })
+  write_file(project .. '/b.md', { 'b' })
+  edit(project .. '/a.md')
+  review('global', 'a 전체 코멘트')
+
+  -- When / Then
+  eq(review('global_text'), 'a 전체 코멘트')
+  edit(project .. '/b.md')
+  eq(review('global_text'), vim.NIL)
+end
+
 -- 비슷한 위치에 단 어노테이션 중 원하는 것을 고를 수 있도록, 커서 위치의 후보를 유력한 순서로 돌려준다.
 
 T['커서 위치의 후보(annotations_at_cursor)'] = MiniTest.new_set()
@@ -373,7 +415,7 @@ A['커서가 첫 줄에 있으면 파일 전체 코멘트(global)도 범위 후�
   eq(result, { { kind = 'comment', text = '첫 줄 코멘트' }, { kind = 'global', text = '전체 코멘트' } })
 end
 
-A['커서가 첫 줄이 아니면 파일 전체 코멘트(global)는 후보에 들어가지 않는다'] = function()
+A['커서가 첫 줄이 아니고 커서 줄에 범위 후보가 있으면 파일 전체 코멘트(global)는 후보에 들어가지 않는다'] = function()
   -- Given: 전체 코멘트와 2번째 줄 코멘트가 있고, 커서는 2번째 줄에 있다.
   write_file(project .. '/a.md', { '하나', '둘' })
   edit(project .. '/a.md')
@@ -386,6 +428,70 @@ A['커서가 첫 줄이 아니면 파일 전체 코멘트(global)는 후보에 �
 
   -- Then
   eq(result, { { kind = 'comment', text = '둘째 줄 코멘트' } })
+end
+
+-- 전체 코멘트를 고치거나 지우려고 첫 줄까지 올라가지 않아도 되도록, 커서 줄에 후보가 없으면 전체 코멘트로 넘어간다.
+A['커서 줄에 범위 후보가 없으면 첫 줄이 아니어도 파일 전체 코멘트(global)가 후보가 된다'] = function()
+  -- Given: 전체 코멘트와 1번째 줄 코멘트가 있고, 커서는 아무 어노테이션도 없는 3번째 줄에 있다.
+  write_file(project .. '/a.md', { '하나', '둘', '셋' })
+  edit(project .. '/a.md')
+  review('global', '전체 코멘트')
+  review('comment', { 1, 0, 1, #'하나' }, '첫 줄 코멘트')
+  child.api.nvim_win_set_cursor(0, { 3, 0 })
+
+  -- When
+  local result = candidates()
+
+  -- Then
+  eq(result, { { kind = 'global', text = '전체 코멘트' } })
+end
+
+A['커서 줄에 범위 후보가 없고 파일 전체 코멘트도 없으면 후보가 없다'] = function()
+  -- Given: 1번째 줄 코멘트만 있고, 커서는 2번째 줄에 있다.
+  write_file(project .. '/a.md', { '하나', '둘' })
+  edit(project .. '/a.md')
+  review('comment', { 1, 0, 1, #'하나' }, '첫 줄 코멘트')
+  child.api.nvim_win_set_cursor(0, { 2, 0 })
+
+  -- When
+  local result = candidates()
+
+  -- Then
+  eq(result, {})
+end
+
+A['커서 줄에 고칠 수 있는 코멘트가 없으면(comments_at_cursor) 파일 전체 코멘트(global)가 후보가 된다'] = function()
+  -- Given: 전체 코멘트와 2번째 줄 삭제 표시가 있고, 커서는 2번째 줄에 있다.
+  write_file(project .. '/a.md', { '하나', '둘' })
+  edit(project .. '/a.md')
+  review('global', '전체 코멘트')
+  review('delete', { 2, 0, 2, #'둘' })
+  child.api.nvim_win_set_cursor(0, { 2, 0 })
+
+  -- When
+  local result = child.lua([[
+    return vim.tbl_map(function(ann)
+      return { kind = ann.kind, text = ann.text }
+    end, require('nitpick.review').comments_at_cursor())
+  ]])
+
+  -- Then: 삭제 표시는 고칠 수 없으므로 빠지고 전체 코멘트가 후보가 된다.
+  eq(result, { { kind = 'global', text = '전체 코멘트' } })
+end
+
+A['다른 버퍼의 파일 전체 코멘트(global)는 커서 줄에 후보가 없어도 후보에 들어가지 않는다'] = function()
+  -- Given: a.md에만 전체 코멘트가 있고, 커서는 b.md에 있다.
+  write_file(project .. '/a.md', { 'a' })
+  write_file(project .. '/b.md', { 'b' })
+  edit(project .. '/a.md')
+  review('global', 'a 전체 코멘트')
+  edit(project .. '/b.md')
+
+  -- When
+  local result = candidates()
+
+  -- Then
+  eq(result, {})
 end
 
 A['다른 버퍼의 어노테이션은 같은 줄에 있어도 후보에 들어가지 않는다'] = function()
